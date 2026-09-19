@@ -33,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
                      help="skip the model entirely and use the scripted baseline "
                           "(already implied by --headless)")
     run.add_argument("--hivemind-allow-api", action="store_true",
-                     help="permit the Anthropic rung of the ladder (needs network)")
+                     help="use OpenAI with scripted fallback (needs OPENAI_API_KEY and network)")
     run.add_argument("--response-team", nargs="?", const="workswarm",
                      choices=("workswarm", "local", "heuristic"),
                      help="optional lead/logistics/safety team; default uses native WorkSwarm Leader/Teammate")

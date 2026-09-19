@@ -22,46 +22,41 @@ WorkSwarm **0.2.6** and its resolved dependencies are pinned in
 [`requirements.lock`](../integrations/workswarm/requirements.lock), in a separate
 `integrations/workswarm/.venv`. The core environment does not import WorkSwarm. The
 lock was verified on macOS arm64 / Python 3.12; other platforms are unverified.
-Installation needs network access; inference and mission execution use localhost only.
-The first framework import can take tens of seconds; startup has a separate 90-second
-limit while the scripted advisor keeps working.
+Installation and OpenAI inference need network access. The scripted fallback works
+without a model connection. The first framework import has a separate startup budget.
 
-Use the stock Qwen2.5-1.5B-Instruct Q4_K_M GGUF documented in
-[`models.lock`](../assets/models/models.lock). Put it at
-`assets/models/hivemind-base.gguf`; expected SHA256:
-
-```text
-6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e
-```
-
-`llama` must be on PATH, or installed by the macOS Llama app at `~/.llama-app/llama`.
-The launcher also accepts `LLAMA_BIN=/absolute/path/to/llama`.
-The setup script installs the framework, not the model/server or Godot.
-
-If the model is missing, download the official artifact once and verify it before use:
-
-```bash
-curl -L --fail \
-  https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf \
-  -o assets/models/hivemind-base.gguf
-shasum -a 256 assets/models/hivemind-base.gguf
-```
+The default model is `gpt-4.1-mini`, configured in `assets/scenarios/team_response.yaml`.
+Set `OPENAI_MODEL` to override it with a compatible Chat Completions model supporting
+strict structured outputs. Keys are read only from `OPENAI_API_KEY`; no key belongs in
+YAML, source files, trace logs, or Git. `.env` files are ignored, but are not loaded automatically.
+The local GGUF launcher is an optional legacy path and is not needed for OpenAI.
 
 ## Run the real application
 
-Terminal 1:
+In PowerShell, enter a replacement API key without echoing it or putting it in shell history:
 
-```bash
-CHAT_TEMPLATE=chatml CTX_SIZE=8192 ./scripts/serve_hivemind.sh
+```powershell
+$credential = Read-Host 'OpenAI API key' -AsSecureString
+$env:OPENAI_API_KEY = [System.Net.NetworkCredential]::new('', $credential).Password
+uv run python -m swarmmind.cli run --demo --response-team --team-trace runs/team/live.jsonl
 ```
 
-Terminal 2, after the model says it is listening on port 8080:
+For the regular single-provider hivemind:
 
-```bash
-uv run python -m swarmmind.cli run --demo --scenario demo --seed 42 --wait \
-  --response-team --team-trace runs/team/live.jsonl \
-  --team-goal "Prioritize confirmed rescue work and revise the response as hazards and capacity change."
+```powershell
+uv run python -m swarmmind.cli run --demo --hivemind-allow-api
 ```
+
+The native team still requires its isolated WorkSwarm environment. On Windows supply
+`--team-python integrations/workswarm/.venv/Scripts/python.exe` if that is where the
+framework was installed; the original setup script targets macOS/Linux.
+`--response-team local` uses the simpler role workflow with the same configured OpenAI
+endpoint; the legacy mode name describes the workflow, not where inference runs.
+`--headless` stays model-free, and `--response-team heuristic` needs no API key.
+
+Historical examples and measurements below used Qwen. They are retained as historical
+evidence, not validation of the OpenAI configuration. Live OpenAI quality and latency
+have not yet been measured.
 
 Open `godot/` in Godot and run its main scene. Keep terminal 2 beside it: the dashboard
 shows sector effects, while the terminal shows the role handoffs and proposal IDs.

@@ -4,11 +4,11 @@ Hierarchical hivemind-controlled robot swarm for simulated disaster search and r
 Built for Hack the North.
 
 Three control tiers: a 20 Hz reflex layer, a 1 Hz decentralised task auction that self-heals
-when robots die, and a locally-run LLM issuing sector-level strategy every 6 seconds under a JSON schema constraint.
+when robots die, and an optional OpenAI model issuing sector-level strategy every 6 seconds under a JSON schema constraint.
 The auction has no LLM in it, which is why the swarm keeps working when the hivemind goes offline.
 
 An optional **three-agent response team** adds a rescue lead, logistics specialist and
-safety reviewer using openJiuwen/WorkSwarm's native Leader/Teammate system and the local model. Peers can revise
+safety reviewer using openJiuwen/WorkSwarm's native Leader/Teammate system and the OpenAI model. Peers can revise
 or veto sector plans; validated orders affect the existing auction. The team has an
 independent trace and graceful scripted fallback.
 See [setup and complete demo instructions](docs/MULTI_AGENT_DEMO.md), including current
@@ -25,3 +25,8 @@ uv sync
 make check                                          # lint + tests + the tiny fixture smoke mission
 uv run python -m swarmmind.cli run --headless --seed 42
 ```
+
+OpenAI setup: set `OPENAI_API_KEY` in your shell, then run
+`uv run python -m swarmmind.cli run --demo --hivemind-allow-api`.
+The response team defaults to `gpt-4.1-mini`; see the setup guide for its isolated runtime.
+`OPENAI_MODEL` overrides the model for both paths. No API key is stored in the project.

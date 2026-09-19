@@ -11,7 +11,6 @@ import tempfile
 import time
 from collections import Counter
 from pathlib import Path
-from urllib.parse import urlparse
 
 from openjiuwen.agent_teams import (
     DeepAgentSpec,
@@ -82,8 +81,6 @@ ROLE_PROMPTS = {
 
 class NativeEpisode:
     def __init__(self, snapshot, config, record):
-        if urlparse(config.model_url).hostname not in {"127.0.0.1", "localhost", "::1"}:
-            raise ValueError("response team requires a loopback model endpoint")
         self.snapshot, self.config, self.record = snapshot, config, record
         self.tools = MissionTools(snapshot, config, record)
         self.candidates = self.tools.candidates()
@@ -366,6 +363,7 @@ def register_episode(episode):
 
 
 async def run_native(snapshot, config, record):
+    key = config.model_api_key()
     episode = NativeEpisode(snapshot, config, record)
     if not episode.candidates:
         return {"directive": None, "reason": "No observed candidate work."}
@@ -374,7 +372,7 @@ async def run_native(snapshot, config, record):
         configure_openjiuwen_home(folder)
         root = Path(folder)
         model_spec = ModelSpec(
-            model_client_config=ModelClientConfig(client_provider=PROVIDER, api_key="local-no-secret",
+            model_client_config=ModelClientConfig(client_provider=PROVIDER, api_key=key,
                 api_base=config.model_url.removesuffix("/chat/completions"), timeout=config.call_timeout_s, max_retries=0,
                 stream_first_chunk_timeout=config.call_timeout_s),
             model_request_config=ModelRequestConfig(model=config.model, temperature=0, max_tokens=config.max_tokens,
@@ -405,7 +403,7 @@ async def run_native(snapshot, config, record):
                                                 desc=f"Rescue {role} specialist", prompt=ROLE_PROMPTS[role])
                                 for role in ("logistics", "safety")],
             model_pool=[ModelPoolEntry(
-                model_name=config.model, api_provider=PROVIDER, api_key="local-no-secret",
+                model_name=config.model, api_provider=PROVIDER, api_key=key,
                 api_base_url=config.model_url.removesuffix("/chat/completions"),
                 metadata={"client": {"timeout": config.call_timeout_s, "max_retries": 0,
                                      "stream_first_chunk_timeout": config.call_timeout_s},

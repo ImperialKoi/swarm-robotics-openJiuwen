@@ -9,5 +9,5 @@ token_budget: 9000
 max_candidates: 8
 hazard_ceiling: 0.35
 explored_ceiling: 0.96
-model_url: http://127.0.0.1:8080/v1/chat/completions
-model: qwen2.5-1.5b-instruct
+model_url: https://api.openai.com/v1/chat/completions
+model: gpt-4.1-mini

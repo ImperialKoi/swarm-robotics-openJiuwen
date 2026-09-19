@@ -1,9 +1,13 @@
 """Configuration for the optional team; separate from frozen bus contracts."""
 
+import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
+
+from ..providers.openai_api import OPENAI_URL, api_key
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -23,7 +27,20 @@ class TeamConfig(BaseModel):
     model_url: str
     model: str
 
+    def model_api_key(self) -> str:
+        if self.model_url == OPENAI_URL:
+            return api_key()
+        endpoint = urlparse(self.model_url)
+        if (endpoint.scheme in {"http", "https"}
+                and endpoint.hostname in {"127.0.0.1", "localhost", "::1"}
+                and not endpoint.username and not endpoint.password):
+            return "local-no-secret"
+        raise ValueError("Model endpoint must be official OpenAI HTTPS or loopback")
+
     @classmethod
     def load(cls):
         path = ROOT / "assets/scenarios/team_response.yaml"
-        return cls.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
+        values = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if os.environ.get("OPENAI_MODEL"):
+            values["model"] = os.environ["OPENAI_MODEL"]
+        return cls.model_validate(values)

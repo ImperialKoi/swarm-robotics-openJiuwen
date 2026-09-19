@@ -1,3 +1,9 @@
+> Current model configuration: the response team uses OpenAI `gpt-4.1-mini` via
+> `OPENAI_API_KEY`. The regular hivemind uses OpenAI with `--hivemind-allow-api`.
+> This user-requested hosted configuration supersedes the local-Qwen setup below;
+> network access is needed for model calls. Headless runs and scripted fallback remain
+> offline. Historical Qwen measurements do not validate OpenAI behavior.
+
 # CLAUDE.md — SwarmMind
 
 Hierarchical hivemind-controlled robot swarm for simulated disaster search and rescue.

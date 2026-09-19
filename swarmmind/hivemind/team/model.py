@@ -1,10 +1,10 @@
-"""Small local-only JSON client; no API key, general tools or simulator access."""
+"""Bounded OpenAI/loopback JSON client, without general tools or simulator access."""
 
 import json
 import time
-import urllib.parse
 import urllib.request
 
+from ..providers.openai_api import response_text
 from .workflow import ROLES
 
 
@@ -17,8 +17,7 @@ def choice_schema(count):
 
 class LocalModel:
     def __init__(self, config, record):
-        if urllib.parse.urlparse(config.model_url).hostname not in {"127.0.0.1", "localhost", "::1"}:
-            raise ValueError("response team requires a loopback model endpoint")
+        self._key = config.model_api_key()
         self.config, self.record = config, record
         self.deadline = time.monotonic() + config.deadline_s
         self.tokens = 0
@@ -41,7 +40,8 @@ class LocalModel:
         }
         request = urllib.request.Request(self.config.model_url,
                                          data=json.dumps(body).encode(),
-                                         headers={"Content-Type": "application/json"})
+                                         headers={"Content-Type": "application/json",
+                                                  "Authorization": f"Bearer {self._key}"})
         started = time.monotonic()
         with urllib.request.urlopen(request, timeout=min(remaining, self.config.call_timeout_s)) as r:
             payload = json.loads(r.read(65537))
@@ -53,4 +53,4 @@ class LocalModel:
                     latency_ms=round((time.monotonic() - started) * 1000))
         if time.monotonic() > self.deadline or self.tokens > self.config.token_budget:
             raise TimeoutError("team budget exhausted")
-        return json.loads(payload["choices"][0]["message"]["content"])
+        return json.loads(response_text(payload))

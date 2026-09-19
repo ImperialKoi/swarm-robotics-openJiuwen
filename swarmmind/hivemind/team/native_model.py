@@ -1,4 +1,4 @@
-"""SDK model-client extension for bounded local-model tool arguments.
+"""SDK model-client extension for bounded OpenAI/loopback tool arguments.
 
 The installed llama.cpp build can ignore tool_choice. JSON-schema decoding is
 reliable, so adapt one native tool's argument schema into a structured response.
@@ -18,14 +18,14 @@ from openjiuwen.core.foundation.llm import (
     UserMessage,
 )
 
-PROVIDER = "SwarmMindLocal"
+PROVIDER = "SwarmMindStructured"
 
 
 @get_client_registry().register_client(PROVIDER, "llm")
 class LocalToolArguments(OpenAIModelClient):
     async def invoke(self, messages, *, tools=None, **kwargs):
         if len(tools or []) != 1:
-            raise ValueError("local native client requires exactly one authorized stage tool")
+            raise ValueError("native client requires exactly one authorized stage tool")
         tool = tools[0]
         name, schema = tool.name, tool.parameters
         prompt = UserMessage(content=f"Call {name}. Return only its JSON arguments matching this schema: "
@@ -37,6 +37,8 @@ class LocalToolArguments(OpenAIModelClient):
             [*messages, prompt], tools=None,
             response_format={"type": "json_schema", "json_schema": {
                 "name": name, "strict": True, "schema": schema}}, **kwargs)
+        if result.finish_reason != "stop" or not result.content:
+            raise ValueError("Model did not complete its structured response")
         arguments = json.loads(result.content)
         validate(arguments, schema)  # fail closed even if the endpoint ignores its schema
         return result.model_copy(update={
