@@ -11,7 +11,8 @@ import pytest
 from swarmmind.viz.terrain_surface import TerrainSurface
 
 
-def test_native_landscape_matches_reference(tmp_path):
+@pytest.mark.parametrize("authored", [False, True])
+def test_native_landscape_matches_reference(tmp_path, authored):
     native = shutil.which("godot") or "/Applications/Godot.app/Contents/MacOS/Godot"
     if not Path(native).is_file():
         pytest.skip("Native Godot unavailable; terrain mathematics are tested separately")
@@ -26,15 +27,22 @@ def test_native_landscape_matches_reference(tmp_path):
     water[6] = 0
     water = water.astype(np.float32)
     cell = .7
-    reference = TerrainSurface(height, occ, water, cell)
+    layout = ({"roads": [[[0, 0], [8, 5], [13, 2]], [[8, 5], [9, 9]]],
+               "road_width_m": 2.4, "woodlands": [[3, 4, 5, 3]],
+               "landslides": [[11, 5, 3, 2]], "buildings": [[1, 1, 2, 3]]}
+              if authored else None)
+    reference = TerrainSurface(height, occ, water, cell, layout)
     fixture = {
         "height": height.ravel().tolist(), "occupancy": occ.ravel().tolist(),
         "water": water.ravel().tolist(), "width": 19, "depth": 13, "cell": cell,
+        "layout": layout or {},
     }
     (tmp_path / "fixture.json").write_text(json.dumps(fixture))
     (tmp_path / "project.godot").write_text("config_version=5\n")
     root = Path(__file__).resolve().parents[1]
     shutil.copyfile(root / "godot/scripts/terrain_surface.gd", tmp_path / "terrain_surface.gd")
+    shutil.copyfile(root / "godot/scripts/reference_landscape.gd",
+                    tmp_path / "reference_landscape.gd")
     (tmp_path / "check.gd").write_text('''extends SceneTree
 const Surface = preload("res://terrain_surface.gd")
 
@@ -42,7 +50,7 @@ func _initialize() -> void:
 	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://fixture.json"))
 	var source := Surface.new()
 	source.setup(PackedFloat32Array(data.height), PackedByteArray(data.occupancy),
-		PackedFloat32Array(data.water), int(data.width), int(data.depth), float(data.cell))
+		PackedFloat32Array(data.water), int(data.width), int(data.depth), float(data.cell), data.layout)
 	source.flight_height_at_world(0.0, 0.0)
 	var result := {
 		"flight_corners": Array(source.flight_corners),

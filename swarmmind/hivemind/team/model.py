@@ -4,7 +4,7 @@ import json
 import time
 import urllib.request
 
-from ..providers.openai_api import response_text, routing
+from ..providers.openai_api import response_text, tune_body
 from .workflow import ROLES
 
 
@@ -37,8 +37,8 @@ class LocalModel:
                 {"role": "user", "content": json.dumps(context, separators=(",", ":"))}],
             "response_format": {"type": "json_schema", "json_schema": {
                 "name": "role_choice", "strict": True, "schema": choice_schema(count)}},
-            **routing(self.config.model_url),
         }
+        tune_body(body, self.config.model_url, self.config.model)
         request = urllib.request.Request(self.config.model_url,
                                          data=json.dumps(body).encode(),
                                          headers={"Content-Type": "application/json",

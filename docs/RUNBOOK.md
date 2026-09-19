@@ -1,5 +1,10 @@
 # RUNBOOK — demo day
 
+**Terrain update:** `demo.yaml` now uses the 320 × 216 m [Nepal confluence crop](NEPAL_TERRAIN.md).
+The route/construction checks cover seeds 42–45. The historical mission timings and
+rescue counts below require a fresh rehearsal on this terrain.
+
+
 **Update:** use [MULTI_AGENT_DEMO.md](MULTI_AGENT_DEMO.md) for the current
 build, response-team setup, live disable command and measured limitations. The current
 scenario has 512 robots and **110 casualties**. The timings and scores below

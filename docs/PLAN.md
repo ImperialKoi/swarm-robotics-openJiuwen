@@ -80,7 +80,7 @@ The real ceiling is likely dashboard readability and prompt legibility rather th
 
 ## 1. What is actually being built
 
-A heterogeneous swarm of 768 ground robots searches a 480 m × 320 m collapsed disaster zone divided into 48 labeled sectors, finds and extracts 120 casualties, while a hazard spreads and one robot is destroyed mid-run.
+A heterogeneous swarm of 512 robots searches a 320 m × 216 m disaster zone divided into 48 labeled sectors, finds and extracts 110 casualties, while a hazard spreads and one robot is destroyed mid-run. The owner-requested [Nepal confluence crop](NEPAL_TERRAIN.md) replaces the previous random terrain; historical mission results do not measure this new map.
 
 > **Scenario numbers in §1–§3 were corrected to match `assets/scenarios/demo.yaml`, which is the only source of truth.** They had drifted twice (map 320×208 → 480×320 at D5d, casualties 8 → 80 → 120) and the document did not follow. That drift is not cosmetic: §6's 75% rescue target was set against the *first* of those scenarios and was still being quoted against the third. See §6.1.
 
@@ -119,7 +119,7 @@ This is a strict improvement over the original spec.
 | Perception | **Real CV.** Egocentric camera crops off a shared appearance raster, occluded; classical detector ships as baseline, CNN must beat it at the gate |
 | Robot lanes | 4 actuator lanes; body + behavior evolved within each lane |
 | Robot count | **768**, split **352 scouts / 176 diggers / 144 carriers / 96 relays** — the split is measured against comms coverage, not even (MEASUREMENTS.md M-33). Measured ceiling under the D1 controller was 3072 (M-1); mission size, not compute, is the binding constraint — see 0.1 D8 |
-| Map | 480 m × 320 m, 1.0 m grid (153,600 cells), 48 sectors A1–F8 |
+| Map | 320 m × 216 m, 1.0 m grid (69,120 cells), 48 sectors A1–F8; owner-requested Nepal confluence crop |
 | Casualties | **120, 48 buried**, mild distance bias (`distance_weight_exp` 0.4, measured — M-17) |
 | Mission length | 420 s hard cap |
 | Hazard | Ignites t=90 s, `r(t) = 6.0 + 0.30·(t−90)` → ~105 m by t=420, drift 0.50 m/s from C4 |
@@ -141,22 +141,22 @@ This is a strict improvement over the original spec.
 
 ## 3. Mission design (concrete numbers)
 
-These numbers live in `assets/scenarios/demo.yaml` and are measured, not guessed — see [MEASUREMENTS.md](MEASUREMENTS.md). Derivation in [TECHNICAL.md §3](TECHNICAL.md). The fast test suite uses `assets/scenarios/test.yaml` instead, which is deliberately tiny so `make check` stays seconds.
+These numbers live in `assets/scenarios/demo.yaml`. The Nepal crop uses reference-based dimensions; construction and routing checks are in [MEASUREMENTS.md](MEASUREMENTS.md), while full mission performance remains unmeasured on this terrain. Derivation in [TECHNICAL.md §3](TECHNICAL.md). The fast test suite uses `assets/scenarios/test.yaml` instead, which is deliberately tiny so `make check` stays seconds.
 
 | Parameter | Value |
 |---|---|
-| Map | 360 × 240 m, cell **1.0 m** → 86,400 cells, ~0.687 passable at 506 clusters |
-| Sectors | 48 (rows A–F × cols 1–8), each 45.0 × 40.0 m |
-| Terrain | 20 hills, 4 mountains, 8 marshes, 2 straight water-filled rivers with 2 fords each, 14 ditches — slope and water gate which chassis goes where (M-21, M-22, M-62). No valleys: cut D13 |
-| Base / extraction | base `(12, 15)`; 11 further collection points on a 4 × 3 lattice, sized so the worst-case loaded round trip fits the clock (M-2) |
-| Robots | **512** — 235 / 117 / 96 / 64 by lane, the M-33 ratio at the rescaled size |
+| Map | 320 × 216 m, cell **1.0 m** → 69,120 cells; reference-based confluence crop |
+| Sectors | 48 (rows A–F × cols 1–8), each 40 × 36 m |
+| Terrain | Two headwaters joining one outlet; 14–22 m channels, wooded shoulders, small terrace settlements and debris fans. Water and slope gate chassis access |
+| Base / extraction | base `(30, 40)`; 11 further collection points on connected terrace roads |
+| Robots | **512** — 171 / 117 / 96 / 128 by lane |
 | Casualties | **110** total, **44 buried**, `distance_weight_exp` 0.4 (M-17, M-52) |
 | Sim tick | 20 Hz · fog/LOS 5 Hz |
 | Auction cycle | 1 Hz (announce → 0.3 s bid window → award) |
 | Heartbeat / orphan timeout | 2 Hz / 2.0 s |
 | Hivemind cadence / timeout | 6.0 s / 5.0 s hard (raised from 4.0 s — M-27) |
-| Hazard | ignite t=90 s, grows to r≈45 m at t=270, then **burns out** to ≈17 m by t=420; drift 0.375 m/s, origin C4 (M-41, M-47) |
-| Comms | base radius 40 m, relay radius 38 m — 64 relays cannot blanket 360 × 240 m, so placement stays a real decision |
+| Hazard | ignite t=90 s; peak r=31 m at t=240; burns out by t≈326; drift 0.335 m/s, origin C4 |
+| Comms | base radius 40 m, relay radius 46 m; existing range retained for the new crop |
 | Battery | 0.05 %/s idle, 0.20 %/s moving, 1.5 %/s inside hazard |
 | Mission cap | 420 s — **pinned by the demo's own length, not tunable.** 420 s at 1× is the 7-minute run in §4 |
 

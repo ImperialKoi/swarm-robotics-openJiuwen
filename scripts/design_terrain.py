@@ -79,7 +79,13 @@ def review_cameras(world: World, renderer: Renderer3D) -> dict[str, Camera3D]:
                     continue
                 gx, gy = x0 + x, y0 + y
                 point = np.array([gx + width*.5, gy + height*.5]) * world.cell
-                if landscape_kind(*point) != "ruin":
+                if world.scn.terrain.reference is not None:
+                    from swarmmind.viz.reference_landscape import biome_at
+
+                    kind = biome_at(world.scn.terrain.reference, *point)
+                else:
+                    kind = landscape_kind(*point)
+                if kind != "ruin":
                     continue
                 floor = surface.height_at_world(gx * world.cell, gy * world.cell)
                 dx = (surface.height_at_world((gx+width)*world.cell, gy*world.cell)
@@ -106,6 +112,10 @@ def review_cameras(world: World, renderer: Renderer3D) -> dict[str, Camera3D]:
         "mountain": camera(mountain, 104, 250, 31, 53),
         "settlement": camera(settlement, 55, 225, 31, 46),
     }
+    centre_xy = np.array([world.scn.map.width_m, world.scn.map.height_m])*.5
+    centre_z = float(surface.height_at_world(*centre_xy))
+    cameras["plan"] = Camera3D(np.r_[centre_xy, surface.maximum + world.scn.map.width_m*1.3],
+                               np.r_[centre_xy, centre_z], fov_deg=48, up=(0, -1, 0))
     # Show the mountain's shoulder as well as the summit; the summit then sits in the
     # upper third instead of bisecting a frame that is mostly empty sky.
     cameras["mountain"].target[2] -= min(19, (surface.maximum - surface.minimum) * .35)
@@ -145,12 +155,20 @@ def main() -> int:
     parser.add_argument("--width", type=int, default=1000)
     parser.add_argument("--height", type=int, default=700)
     parser.add_argument("--out", type=Path, default=Path("runs/3d/landscape"))
+    parser.add_argument("--export-layout", action="store_true",
+                        help="export scenario reference dressing to the Godot asset")
     parser.add_argument("--fixture", type=Path, help="also write initial bridge messages")
-    parser.add_argument("--views", nargs="+", choices=("overview", "river", "mountain", "settlement"),
+    parser.add_argument("--views", nargs="+", choices=("overview", "river", "mountain", "settlement", "plan"),
                         default=("overview", "river", "mountain", "settlement"))
     args = parser.parse_args()
     start = time.perf_counter()
     world = World(Scenario.load(args.scenario), args.seed)
+    if args.export_layout:
+        if world.scn.terrain.reference is None:
+            parser.error("scenario has no reference landscape to export")
+        asset = Path("godot/assets/landscapes") / f"{world.scn.name}.json"
+        asset.parent.mkdir(parents=True, exist_ok=True)
+        asset.write_text(json.dumps(world.scn.terrain.reference, indent=2) + "\n", encoding="utf-8")
     original = _fingerprint(world)
     renderer = Renderer3D(world, args.width, args.height)
     cameras = review_cameras(world, renderer)
@@ -166,6 +184,9 @@ def main() -> int:
         renderer._tiles.clear()
         begin = time.perf_counter()
         frame = renderer.render(world, camera, fog=False, robots=False)
+        if name == "plan":
+            # Match scenario arrays and the reference photograph: x right, y down.
+            frame = frame[:, ::-1].copy()
         png.write(args.out / f"{name}.png", frame)
         meshes = list(renderer._tiles.values())
         summary["views"][name] = {

@@ -1,4 +1,8 @@
-"""Terrain generation: rolling ground, hills, mountains, water-filled rivers and ditches.
+"""Terrain generation: procedural ground or an authored river-valley crop.
+
+``TerrainCfg.reference`` selects the metre-based landscape in ``landscape.py``.
+The discussion below describes the legacy procedural generator, still used by the
+small test fixture. Both profiles share road grading and chassis traversal fields.
 
 **This is not decoration.** The heightfield used to be render-only; it now produces the
 slope and water fields that decide which robots can go where, which is what makes a
@@ -303,6 +307,12 @@ def generate(rng: np.random.Generator, occ: np.ndarray, cell: float, cfg,
     make the whole map impassable.
     ``water`` is depth, zero on dry land.
     """
+    if cfg.reference is not None:
+        from .landscape import generate as reference_generate
+
+        return reference_generate(rng, occ, cell, cfg.reference, keepouts or [],
+                                  roads or [], road_edges or [])
+
     shape = occ.shape
     h, w = shape
     width_m, height_m = w * cell, h * cell
@@ -585,79 +595,7 @@ def generate(rng: np.random.Generator, occ: np.ndarray, cell: float, cfg,
     # bridged rather than deleted: the reference profile sits ROAD_FREEBOARD_M above the
     # surface anywhere the corridor is wet, so a road crossing a river is a causeway.
     if roads and road_edges:
-        depth_now = _depth()
-        under_water = depth_now > 0.0
-        surface = z + depth_now
-        z_ref = np.where(under_water, surface + ROAD_FREEBOARD_M, z).astype(np.float32)
-        # Corridors are accumulated and applied ONCE, rather than one `np.where` per edge
-        # overwriting the last. Eleven edges meeting at twelve points overlap near every
-        # junction, and on a map with relief the two profiles crossing there disagree by
-        # metres -- written sequentially that disagreement lands as a one-cell cliff at
-        # each corridor's rim. Measured on seed 51: 214 such spikes, up to 5.2 gradient,
-        # two of them on the only road out of base, which is what put wheeled units on
-        # 2% of the map. Blending the corridors by weight makes the result continuous by
-        # construction, because every term in it is.
-        acc_w = np.zeros(shape, dtype=np.float32)
-        acc_h = np.zeros(shape, dtype=np.float32)
-        acc_r = np.zeros(shape, dtype=np.float32)
-        carriageway = np.zeros(shape, dtype=bool)
-        for i, j in road_edges:
-            a = np.array(roads[i], dtype=np.float64)
-            b = np.array(roads[j], dtype=np.float64)
-            span = float(np.linalg.norm(b - a))
-            if span < 1e-3:
-                continue
-            n = max(8, int(span / cell))
-            ds = span / (n - 1)
-            prof = _smooth1d(_sample_along(z_ref, cell, a, b, n),
-                             max(2, int(12.0 / cell)), pin_ends=True)
-            prof = _slope_limit(prof, ds, ROAD_GRADE, pin_ends=True)
-            # The causeway is not optional and cannot be left to the smoothed profile:
-            # smoothing averages a river crossing against the banks either side and pulls
-            # the deck back under the water, which is a bridge a wheeled unit drowns on.
-            # Lift the crossing, then re-establish the gradient by raising the approaches
-            # rather than by dropping the deck.
-            crossing = _sample_along(under_water.astype(np.float32),
-                                     cell, a, b, n) > 0.5
-            if crossing.any():
-                lvl = _sample_along(surface, cell, a, b, n)
-                prof = np.where(crossing, np.maximum(prof, lvl + ROAD_FREEBOARD_M), prof)
-                prof = _slope_limit(prof, ds, ROAD_GRADE, raise_only=True,
-                                    pin_ends=True)
-
-            d, t = _segment_frame(gx, gy, a, b)
-            ramp = prof[np.clip((t * (n - 1)).astype(np.int32), 0, n - 1)]
-            # Flat across the carriageway and a cell beyond it, so the central-difference
-            # slope on the road reads the road and not its shoulder; then a batter as
-            # wide as the cut is deep.
-            flat_to = road_half_width_m + cell
-            outer = flat_to + np.clip(np.abs(ramp - z) / ROAD_BATTER, 2.0,
-                                      ROAD_BATTER_MAX_M)
-            near = d <= outer
-            if not near.any():
-                continue
-            wgt = _smoothstep(np.clip((outer - d) / (outer - flat_to), 0.0, 1.0))
-            # Two accumulators, on purpose. `acc_w` says how much road is here at all and
-            # feathers the outermost batter into natural ground. The height itself is a
-            # sharply weighted vote (`** ROAD_DECK_POWER`) so that a carriageway beats the
-            # batter of a road crossing near it: under a plain weighted mean, a 27 m-wide
-            # cutting alongside dragged its neighbour's deck up and down with it and put
-            # 1.56-gradient cells on the only road out of base.
-            hard = wgt ** ROAD_DECK_POWER
-            acc_r += hard * ramp
-            acc_h += hard
-            acc_w += wgt
-            carriageway |= d <= road_half_width_m * 1.2
-        blend = np.clip(acc_w, 0.0, 1.0)
-        # Natural ground is the prior in the weighted mean, not a floor on the
-        # denominator. Clamping the denominator instead (`acc_r / max(acc_h, 1e-6)`)
-        # returns a *fraction* of the right height out where the weights are tiny, so the
-        # far edge of every batter was pulled down by ~9% of its own elevation -- a 2.4 m
-        # trench ringing each corridor on a 27 m-high hillside, which is what was still
-        # severing the road out of base on seeds 44, 51 and 55. As `acc_h` goes to zero
-        # this form goes to `z`, so the whole expression goes to `z`, which is the answer.
-        ramp = (acc_r + z * ROAD_EPS) / (acc_h + ROAD_EPS)
-        z = (z * (1.0 - blend) + ramp * blend).astype(np.float32)
+        z, carriageway = grade_roads(z, _depth(), cell, roads, road_edges, road_half_width_m)
         wet &= ~carriageway
 
     # Renormalise ground AND every water surface together. Shifting one without the
@@ -682,6 +620,88 @@ def generate(rng: np.random.Generator, occ: np.ndarray, cell: float, cfg,
     full[wall] += 0.9 + rng.random(shape).astype(np.float32)[wall] * 1.3
 
     return full.astype(np.float32), terrain.astype(np.float32), water
+
+
+def grade_roads(z, depth_now, cell, roads, road_edges, road_half_width_m=2.4,
+                node_heights=None):
+    """Shared graded, dry road decks for procedural and reference-based landscapes."""
+    shape = z.shape
+    gx, gy = grid.cell_centres(shape, cell)
+    under_water = depth_now > 0.0
+    surface = z + depth_now
+    z_ref = np.where(under_water, surface + ROAD_FREEBOARD_M, z).astype(np.float32)
+    # Corridors are accumulated and applied ONCE, rather than one `np.where` per edge
+    # overwriting the last. Eleven edges meeting at twelve points overlap near every
+    # junction, and on a map with relief the two profiles crossing there disagree by
+    # metres -- written sequentially that disagreement lands as a one-cell cliff at
+    # each corridor's rim. Measured on seed 51: 214 such spikes, up to 5.2 gradient,
+    # two of them on the only road out of base, which is what put wheeled units on
+    # 2% of the map. Blending the corridors by weight makes the result continuous by
+    # construction, because every term in it is.
+    acc_w = np.zeros(shape, dtype=np.float32)
+    acc_h = np.zeros(shape, dtype=np.float32)
+    acc_r = np.zeros(shape, dtype=np.float32)
+    carriageway = np.zeros(shape, dtype=bool)
+    for i, j in road_edges:
+        a = np.array(roads[i], dtype=np.float64)
+        b = np.array(roads[j], dtype=np.float64)
+        span = float(np.linalg.norm(b - a))
+        if span < 1e-3:
+            continue
+        n = max(8, int(span / cell))
+        ds = span / (n - 1)
+        prof = _smooth1d(_sample_along(z_ref, cell, a, b, n),
+                         max(2, int(12.0 / cell)), pin_ends=True)
+        if node_heights is not None:
+            prof[0], prof[-1] = node_heights[i], node_heights[j]
+        prof = _slope_limit(prof, ds, ROAD_GRADE, pin_ends=True)
+        # The causeway is not optional and cannot be left to the smoothed profile:
+        # smoothing averages a river crossing against the banks either side and pulls
+        # the deck back under the water, which is a bridge a wheeled unit drowns on.
+        # Lift the crossing, then re-establish the gradient by raising the approaches
+        # rather than by dropping the deck.
+        crossing = _sample_along(under_water.astype(np.float32),
+                                 cell, a, b, n) > 0.5
+        if crossing.any():
+            lvl = _sample_along(surface, cell, a, b, n)
+            prof = np.where(crossing, np.maximum(prof, lvl + ROAD_FREEBOARD_M), prof)
+            prof = _slope_limit(prof, ds, ROAD_GRADE, raise_only=True,
+                                pin_ends=True)
+
+        d, t = _segment_frame(gx, gy, a, b)
+        ramp = prof[np.clip((t * (n - 1)).astype(np.int32), 0, n - 1)]
+        # Flat across the carriageway and a cell beyond it, so the central-difference
+        # slope on the road reads the road and not its shoulder; then a batter as
+        # wide as the cut is deep.
+        flat_to = road_half_width_m + cell
+        outer = flat_to + np.clip(np.abs(ramp - z) / ROAD_BATTER, 2.0,
+                                  ROAD_BATTER_MAX_M)
+        near = d <= outer
+        if not near.any():
+            continue
+        wgt = _smoothstep(np.clip((outer - d) / (outer - flat_to), 0.0, 1.0))
+        # Two accumulators, on purpose. `acc_w` says how much road is here at all and
+        # feathers the outermost batter into natural ground. The height itself is a
+        # sharply weighted vote (`** ROAD_DECK_POWER`) so that a carriageway beats the
+        # batter of a road crossing near it: under a plain weighted mean, a 27 m-wide
+        # cutting alongside dragged its neighbour's deck up and down with it and put
+        # 1.56-gradient cells on the only road out of base.
+        hard = wgt ** ROAD_DECK_POWER
+        acc_r += hard * ramp
+        acc_h += hard
+        acc_w += wgt
+        carriageway |= d <= road_half_width_m * 1.2
+    blend = np.clip(acc_w, 0.0, 1.0)
+    # Natural ground is the prior in the weighted mean, not a floor on the
+    # denominator. Clamping the denominator instead (`acc_r / max(acc_h, 1e-6)`)
+    # returns a *fraction* of the right height out where the weights are tiny, so the
+    # far edge of every batter was pulled down by ~9% of its own elevation -- a 2.4 m
+    # trench ringing each corridor on a 27 m-high hillside, which is what was still
+    # severing the road out of base on seeds 44, 51 and 55. As `acc_h` goes to zero
+    # this form goes to `z`, so the whole expression goes to `z`, which is the answer.
+    ramp = (acc_r + z * ROAD_EPS) / (acc_h + ROAD_EPS)
+    z = (z * (1.0 - blend) + ramp * blend).astype(np.float32)
+    return z, carriageway
 
 
 def slope_of(terrain: np.ndarray, cell: float) -> np.ndarray:

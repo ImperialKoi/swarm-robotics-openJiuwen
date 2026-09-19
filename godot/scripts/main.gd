@@ -191,6 +191,7 @@ var map_w := 0.0
 var map_h := 0.0
 var heights := PackedFloat32Array()
 var water := PackedFloat32Array()
+var reference_landscape: Dictionary = {}
 var surface: TerrainSurface
 var _blobs := {}
 var _height_scale := 1.0 / 255.0
@@ -687,7 +688,9 @@ func _build_world() -> void:
 	mat.set_shader_parameter("show_sectors", show_sectors)
 
 	surface = TerrainSurface.new()
-	surface.setup(heights, occ, water, gw, gh, cell)
+	reference_landscape = preload("res://scripts/reference_landscape.gd").load_layout(
+		scenario_name, Vector2(gw*cell, gh*cell))
+	surface.setup(heights, occ, water, gw, gh, cell, reference_landscape)
 	_build_ground()
 	_build_water()
 	_build_props()
@@ -765,7 +768,7 @@ func _build_props() -> void:
 		props.queue_free()
 	props = PropStream.new()
 	add_child(props)
-	props.setup(surface, occ, gw, gh, cell, mat, ground)
+	props.setup(surface, occ, gw, gh, cell, mat, ground, reference_landscape)
 
 
 func _marker_multimesh(mesh: Mesh, colour: Color,

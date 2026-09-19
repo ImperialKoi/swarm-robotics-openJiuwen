@@ -1,11 +1,12 @@
 > Current model configuration: the response team (openJiuwen native Leader/Teammate)
-> uses `openai/gpt-4.1-mini` through **OpenRouter** via `OPENROUTER_API_KEY`
-> (`OPENROUTER_MODEL` overrides). The regular hivemind uses the same endpoint with
+> uses `openai/gpt-5.6-terra` through **OpenRouter** via `OPENROUTER_API_KEY`
+> (`OPENROUTER_MODEL` overrides; per-model quirks live in `TUNING`, measured in M-88 --
+> a model outside that table gets a cautious default). The regular hivemind uses the same endpoint with
 > `--hivemind-allow-api`. Keep the key in the gitignored `.env` and run with
 > `uv run --env-file .env ...`. This user-requested hosted configuration supersedes the
 > local-Qwen setup below; network access is needed for model calls. Headless runs and
 > scripted fallback remain offline. Historical Qwen measurements do not validate hosted
-> behavior; M-87 has the first live OpenRouter checks.
+> behavior; M-87 and M-88 have the live OpenRouter checks.
 
 # SwarmMind — Technical Plan
 
@@ -129,10 +130,12 @@ swarm-robotics/
 
 ### 3.1 Geometry
 
-- Map `320.0 × 208.0` m, occupancy grid at **`1.0` m** → `320 × 208` = 66,560 cells, `uint8` (`0` free, `1` wall, `2` rubble-passable-slow). 43,841 passable at the shipped density.
-- **Why 1.0 m, not 0.5 m:** distance-field cost is `O(cells × diameter)`, so a 4× finer grid on a 10× larger map is ~40× the auction cost (MEASUREMENTS.md M-4). Robot radii (0.22–0.45 m) still sit inside one cell, so collision response is unchanged.
-- 48 sectors: rows `A..F` (y) × cols `1..8` (x), each 40.0 × 34.7 m.
-- Rubble: procedurally generated from the scenario seed — elliptical obstacle clusters, then `grid.ensure_connected` walls off every region unreachable from base. Filling pockets is preferred over regenerating: it is deterministic and cannot loop. Density is tuned to ~0.66 passable (MEASUREMENTS.md M-2); `tests/test_world.py` fails the build outside `0.55 < frac < 0.98`.
+- Demo map **320 × 216 m**, at **1 m** resolution: 69,120 cells, `uint8` (`0` free, `1` wall, `2` rubble-passable-slow). This is the owner's Nepal-confluence reconstruction, 20% less area than the previous 360 × 240 m map. [Layout, dimensions and limits](NEPAL_TERRAIN.md).
+- The reference profile in `assets/scenarios/demo.yaml` specifies three joined river arms, terrace roads, building footprints, woodlands and flood-debris fans in local metres. It is based on photographs without a scale bar or elevation survey; it is not georeferenced terrain.
+- 48 sectors: rows `A..F` (y) × cols `1..8` (x), each **40 × 36 m**. Physical robot dimensions, sensor ranges and speeds are unchanged.
+- `sim/landscape.py` generates reference terrain. `sim/terrain.py` keeps the procedural generator for `test.yaml`; both use the same road grader and chassis slope/water gates. The simulator remains a **custom 2.5D kinematic simulator**.
+- Trees/debris vary deterministically with seeds 42–45; river and road geography stays fixed. Connectivity pruning still removes unreachable occupancy pockets. Collection access is tested for every ground chassis on all four demo seeds.
+- The dashboard and offline renderer share a display-only layout export. It adds road/forest/sediment colours and selects the right props over actual occupancy; the frozen bridge and detector palette are unchanged. Historical performance gates refer to the previous terrain and require a new rehearsal before claims about this crop.
 
 ### 3.2 Fog of war
 

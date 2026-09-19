@@ -137,12 +137,21 @@ class World:
             rubble_fraction=scenario.map.rubble_fraction,
             keepout=scenario.keepouts(),
         )
+        if scenario.terrain.reference is not None:
+            from .landscape import occupancy
+
+            occ = occupancy(self.rng["map"], scenario, scenario.terrain.reference)
         base_cell = grid.world_to_cell(*scenario.base, cell, self.shape)
         base_cell = (int(base_cell[0]), int(base_cell[1]))
         # Roads first, so the base and every collection point share a component before
         # anything unreachable gets walled off.
         self.road_points = [scenario.base, *scenario.extraction_zones]
-        self.road_edges = grid.road_network(self.road_points)
+        if scenario.terrain.reference is not None:
+            from .landscape import road_network
+
+            self.road_points, self.road_edges = road_network(scenario.terrain.reference)
+        else:
+            self.road_edges = grid.road_network(self.road_points)
         occ = grid.carve_roads(occ, cell, self.road_points, self.road_edges)
         self.occ = grid.ensure_connected(occ, base_cell)
         self.passable = self.occ != grid.WALL

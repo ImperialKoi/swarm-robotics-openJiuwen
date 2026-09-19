@@ -5451,3 +5451,125 @@ They fail identically without this change. Three more native-Godot tests failed 
 until the gitignored class cache was built (`Godot --headless --path godot --import`). The isolated
 SDK suite passed 5 coordination cases and 2 worker requests. The `test.yaml` seed-42 smoke hash
 is unchanged at `2e9b29dc80f5b5c2` (headless never calls a model).
+
+## M-88 — Nepal confluence crop (2026-09-19)
+
+Owner-requested reconstruction from the supplied river-confluence/settlement photographs.
+The map is **320 × 216 m**, down from 360 × 240 m: 69,120 cells at the same 1 m
+resolution, **20% less area**. River widths are 14/18/22 m, roads 4.8 m and the 22
+house footprints 6–8 m across. The photographs provide no scale bar or elevation survey;
+these are authored local proportions, not georeferenced Nepal terrain. Scope and
+reproduction commands: [NEPAL_TERRAIN.md](NEPAL_TERRAIN.md).
+
+All measurements below are construction-only on this laptop: **zero mission ticks**,
+512 robots, 110 casualties, seeds 42–45. They do not measure rescue performance.
+
+| Seed | Build (s) | Occupancy-passable | Relief (m) | Wet area | Reach: wheels / tracks / legs |
+|---|---:|---:|---:|---:|---:|
+| 42 | 0.418 | 87.23% | 47.625 | 10.06% | 49.39% / 82.79% / 99.46% |
+| 43 | 0.352 | 87.37% | 47.961 | 10.06% | 48.35% / 82.76% / 99.50% |
+| 44 | 0.347 | 87.65% | 47.550 | 10.06% | 52.27% / 82.78% / 99.45% |
+| 45 | 0.358 | 87.45% | 48.025 | 10.06% | 49.32% / 82.80% / 99.48% |
+
+Reach is the base-connected fraction of occupancy-passable cells, with each chassis's
+water and slope gates applied. Every ground chassis reaches all twelve collection
+points on all four seeds; spawns are chassis-passable, house foundations are dry and
+level, and no obstacle footprint occupies an interior wet channel. The two short road
+crossings are dry causeways in the existing 2.5D model, not simulated bridge hydraulics.
+
+Two implementation defects were caught before the final map: independently pinned
+short roads had infeasible endpoint elevations, stranding wheels at 17% reach; project
+junction heights onto the road graph's grade bound before grading the segments. House
+pad shoulders could tilt the neighbouring foundation; apply the level cores after the
+shoulders while retaining the road deck. Tests cover both outcomes.
+
+Offline 1000 × 700 previews are in `runs/3d/nepal/`, with camera/geometry timings in
+`review.json` and the per-seed construction numbers in `construction.json`. The renderer
+leaves world arrays and RNG states unchanged. Python/Godot numerical parity covers both
+generic terrain and the new forest/sediment/road colours. Godot's display layout is an
+export of scenario YAML; an equality test prevents the two copies drifting.
+
+The initial full check exposed the two native failures already recorded in M-87. Logs
+identified the missing `.godot/imported/CurledUpPerson…scn` cache entry; reimporting the
+existing assets repaired it, and the native burial/thermal tests then passed. No source
+change to burial or thermal behaviour was needed. The independent `test.yaml` headless
+smoke reached t=420 with the original hash **`2e9b29dc80f5b5c2`** (13.53 wall-seconds).
+
+Historical gates and learned-component margins remain records of the previous terrain.
+No full demo mission, training run or new performance gate was run for this change.
+
+Final validation: the full run finished with **633 passed / 1 failed** in 362.82 s.
+The remaining burial timeout had started before the cache repair. The follow-up
+`UV_CACHE_DIR=/private/tmp/swarmmind-uv-cache PYTEST_ADDOPTS=--lf make check` passed:
+ruff clean, the one previously failing test passed (0.84 s), and the complete fixture
+smoke passed in 13.82 s with hash `2e9b29dc80f5b5c2`. Thus all **634 tests** passed
+across the full run and its failed-test rerun; this is not a claim that the initial
+full command exited successfully. Both native burial/thermal cases also passed together
+after import. The final terrain/reference tests passed on all four demo seeds.
+
+## M-88 — hosted model chosen by measurement: `openai/gpt-5.6-terra`
+
+The owner asked for the fastest and best available models, cost disregarded. 268 OpenRouter
+models in the main families advertise `structured_outputs`; 15 were tried on **both real
+request shapes** — the Tier-3 directive call with the captured seed-42 demo-map prompt
+(48 sectors, ~1,200 input tokens) and a full native openJiuwen team episode against a real
+demo-map snapshot, through a recording proxy. A model counts only if the JSON validates
+against the shipped schema, the same check the adapter makes.
+
+Two failure modes decided most of it, and neither is visible without a live call:
+
+- **`temperature` is a 404, not a warning.** Frontier models (GPT-5.6/GPT-6, Claude Opus 5)
+  do not accept `temperature` on their structured-output hosts. With `require_parameters`
+  the whole request fails: *"No endpoints found that can handle the requested parameters."*
+  It is now sent only to models measured to take it.
+- **Anthropic's flagships refuse this prompt.** `claude-opus-5` and `claude-fable-5.1`
+  return `finish_reason: content_filter` with an empty body on every route and schema
+  tried: *"This request triggered restrictions on violative cyber content."* A swarm being
+  commanded over a disaster map reads as cyber content to the classifier. `claude-sonnet-5`
+  answers, at 3.8–10.3 s. **No Anthropic model is usable here.**
+
+Hidden reasoning tokens also count against `max_tokens`, so the old 200-token cap truncated
+every reasoning model's answer. Each model's reasoning control, temperature and token cap
+now live in `TUNING` in `providers/openai_api.py`, measured rather than guessed.
+
+Directive call, 8 samples each on the demo-map prompt, schema-validated:
+
+| model | valid | median | max | $/call | note |
+|---|---|---|---|---:|---|
+| `openai/gpt-6-astra` | 8/8 | 4.94 s | 6.34 s | 0.0089 | flagship; needs 1,200 tokens for thinking |
+| `openai/gpt-6-astra-pro` | 8/8 | 6.33 s | **8.29 s** | 0.0441 | exceeds the 8 s rung timeout |
+| `openai/gpt-5.6-sol` | 8/8 | 1.65 s | 1.81 s | 0.0054 | |
+| **`openai/gpt-5.6-terra`** | **8/8** | **1.51 s** | **1.77 s** | 0.0012 | **shipped, owner's choice** |
+| `openai/gpt-5.6-luna` | 8/8 | 1.20 s | 2.24 s | 0.0001 | cheapest fast tier |
+| `google/gemini-3.1-pro-preview` | 3/3 | 7.15 s | — | 0.0122 | too slow for a 6 s cycle |
+| `x-ai/grok-4.6` | 3/3 | 10.72 s | — | 0.0061 | too slow |
+| `google/gemini-3.8-flash` | 3/3 | 1.03 s | — | 0.0012 | directive ok, **team episodes time out** |
+| `z-ai/glm-5.3` | 3/3 | 0.49 s | — | 0.0018 | fastest usable |
+| `deepseek/deepseek-v4.1-flash` | 3/3 | 0.57 s | — | 0.0002 | |
+| `anthropic/claude-*` | 0 | — | — | — | refused or prose, see above |
+| `openai/gpt-4.1-mini` (previous) | 8/8 | 1.10 s | — | 0.0003 | |
+
+Live on the demo map, seed 42, 180 simulated seconds each, `gpt-5.6-terra`, this laptop:
+
+| run | model work | result | cost |
+|---|---|---|---:|
+| `--response-team` | 9 episodes, 36 calls, 17,093 tokens, episode latency 4.1–4.3 s | 4 applied, 5 rejected as stale/infeasible, **0 fallbacks**, 46/110 rescued, **1.00× realtime** | **$0.028** |
+| `--hivemind-allow-api` | 20/20 cycles answered by the `api` rung, 1.33–1.61 s | 0 timed out, errored, unparseable or fallen through; 0 filter rejections; 48/110 rescued, **1.00× realtime** | **$0.083** |
+
+Both held 1.00× realtime with 512 robots, so the model is not on the simulation's critical
+path. The five rejected team proposals were refused by the existing feasibility filter, not
+by the model. Rescue counts from single runs on one seed are **not** a performance
+comparison: no uplift over the scripted baseline is claimed or measured here.
+
+**Which map these ran on.** `demo.yaml` was being rewritten in the same working tree while
+this was measured (the authored-landscape work: 360x240 m becomes 320x216 m). The captured
+directive prompts, and so the 8-sample latency table, come from the **previous** demo map;
+the two 180 s live runs come from the **revised** one. Both maps carry 48 sectors and a
+~1,200-token prompt, so the latency and cost figures stand, but the rescue counts above are
+not comparable with any earlier row, and were never a comparison to begin with.
+
+Validation for M-87 and M-88: lint clean; the 116 tests covering the provider, team,
+hivemind, mission, determinism, contract and ground-truth boundaries pass, as do the
+isolated SDK suite's 5 coordination cases and 2 worker requests; `test.yaml` seed-42 smoke
+hash unchanged at `2e9b29dc80f5b5c2`. The full suite was not re-run clean here because the
+concurrent terrain work in the tree owns part of it.

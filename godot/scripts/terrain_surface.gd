@@ -5,6 +5,8 @@ extends RefCounted
 ## Frozen wire samples contain obstacle decoration: removing its mean is approximate;
 ## occupancy-faithful obstacle meshes remain separate and navigation is unchanged.
 
+const LANDSCAPE = preload("reference_landscape.gd")
+
 const WALL_LIFT := 1.55
 const RUBBLE_LIFT := 1.0
 const SMOOTH_PASSES := 2
@@ -31,7 +33,8 @@ var flight_corners := PackedFloat32Array()
 
 
 func setup(heights: PackedFloat32Array, occupancy: PackedByteArray,
-		depths: PackedFloat32Array, width: int, depth: int, cell_size: float) -> void:
+		depths: PackedFloat32Array, width: int, depth: int, cell_size: float,
+		reference: Dictionary = {}) -> void:
 	gw = width
 	gh = depth
 	cell = cell_size
@@ -141,6 +144,9 @@ func setup(heights: PackedFloat32Array, occupancy: PackedByteArray,
 					distance[mini(y + 1, gh) * (gw + 1) + x]))
 				out[i] = minf(distance[i], near + cell)
 		distance = out
+	var road_distances := PackedFloat32Array()
+	if not reference.is_empty():
+		road_distances = LANDSCAPE.road_distances(reference, gw, gh, cell)
 	var light := Vector3(0.45, 0.82, 0.35).normalized()
 	for y in range(gh + 1):
 		for x in range(gw + 1):
@@ -163,6 +169,8 @@ func setup(heights: PackedFloat32Array, occupancy: PackedByteArray,
 			var bank := (1.0 - smoothstep(0.3, 4.0, distance[i])) * (1.0 - slope * 0.6)
 			var sand_grain := (detail - 0.5) * 0.08
 			color = color.lerp(Color(0.59 + sand_grain, 0.55 + sand_grain, 0.43 + sand_grain), bank)
+			if not reference.is_empty():
+				color = LANDSCAPE.dress_color(color, wx, wy, detail, wet_fraction[i], road_distances[i], reference)
 			color *= (1.0 - wet_fraction[i] * 0.22) * (0.40 + 0.60 * clampf(normal.dot(light), 0.0, 1.0))
 			color.a = 1.0
 			colors[i] = color

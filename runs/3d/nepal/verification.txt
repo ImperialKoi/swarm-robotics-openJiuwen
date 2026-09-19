@@ -1,0 +1,18 @@
+Final terrain: 320 x 216 m; 1 m cells; 20% less area than 360 x 240 m.
+Source: assets/scenarios/demo.yaml, terrain.reference.
+Scale is estimated from the supplied photos; no georeferenced elevation survey.
+
+Validation on this checkout:
+- Full suite: 633 passed, 1 failed, 362.82 seconds.
+- The failure was the native burial check, started before repairing a missing Godot asset import.
+- After asset import, native burial and thermal checks both passed.
+- Failed-test rerun via PYTEST_ADDOPTS=--lf make check: exit 0; lint clean; 1 test passed.
+- The same command's headless test.yaml mission: t=420, hash 2e9b29dc80f5b5c2, 13.82 seconds.
+- All 634 tests therefore passed across the full run and failed-test rerun.
+- All four demo seeds preserve collection access for every ground chassis and safe spawns.
+- All 22 building footprints remain blocked, dry and level.
+- Godot/Python display parity and the exported layout equality pass.
+- Offline previews do not mutate the world or RNG state.
+
+No full demo mission, training run or new gate was performed.
+Historical rescue results do not establish performance on this terrain.
