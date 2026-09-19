@@ -1,0 +1,109 @@
+{
+  "scenario": "demo",
+  "seed": 42,
+  "simulation_ticks": 0,
+  "map_metres": [
+    360.0,
+    240.0
+  ],
+  "resolution": [
+    1000,
+    700
+  ],
+  "setup_seconds": 0.7522,
+  "views": {
+    "overview": {
+      "camera": {
+        "position": [
+          -11.812662124633789,
+          -153.93687438964844,
+          370.5202331542969
+        ],
+        "target": [
+          180.0,
+          120.0,
+          8.461450576782227
+        ],
+        "horizontal_fov_degrees": 48.0
+      },
+      "seconds": 9.4524,
+      "visible_terrain_tiles": 96,
+      "terrain_triangles": 29104,
+      "water_triangles": 19676,
+      "tile_strides": {
+        "2": 28,
+        "4": 68
+      }
+    },
+    "river": {
+      "camera": {
+        "position": [
+          272.64395520083093,
+          8.435965076926557,
+          55.87714634537696
+        ],
+        "target": [
+          310.5,
+          62.5,
+          25.37714634537696
+        ],
+        "horizontal_fov_degrees": 50
+      },
+      "seconds": 3.0868,
+      "visible_terrain_tiles": 27,
+      "terrain_triangles": 47184,
+      "water_triangles": 7940,
+      "tile_strides": {
+        "1": 25,
+        "2": 2
+      }
+    },
+    "mountain": {
+      "camera": {
+        "position": [
+          45.92990509413047,
+          117.77196743826552,
+          97.94631875753403
+        ],
+        "target": [
+          81.5,
+          215.5,
+          49.44631875753403
+        ],
+        "horizontal_fov_degrees": 53
+      },
+      "seconds": 2.595,
+      "visible_terrain_tiles": 17,
+      "terrain_triangles": 32640,
+      "water_triangles": 38,
+      "tile_strides": {
+        "1": 17
+      }
+    },
+    "settlement": {
+      "camera": {
+        "position": [
+          46.60912703473988,
+          83.10912703473988,
+          47.802412652224305
+        ],
+        "target": [
+          85.5,
+          122.0,
+          18.3024126522243
+        ],
+        "horizontal_fov_degrees": 46
+      },
+      "seconds": 4.2772,
+      "visible_terrain_tiles": 37,
+      "terrain_triangles": 70336,
+      "water_triangles": 3624,
+      "tile_strides": {
+        "1": 31,
+        "2": 6
+      }
+    }
+  },
+  "simulation_fingerprint": "7403ee8dabbffe4d18ec066d175b31719caa939691408a0afdf09993d1bb224c",
+  "world_unchanged": true
+}

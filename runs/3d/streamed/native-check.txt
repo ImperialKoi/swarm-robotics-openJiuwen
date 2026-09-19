@@ -1,0 +1,9 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+OpenGL API 4.1 Metal - 90.5 - Compatibility - Using Device: Apple - Apple M1
+
+NATIVE_PID 24367
+WORLD_SETUP_MS 393.076
+MODE 0 FRAME_MS_MEDIAN 4.277 P95 9.648 TERRAIN {"loaded_tiles":96,"lod":{"1":0,"2":77,"4":19,"8":0},"pending":0,"total_tiles":96,"triangles":65844,"visible_tiles":96} PROPS {"detail_instances":0,"loaded_tiles":96,"queued_tiles":0,"total_tiles":96,"triangles":32580,"visible_tiles":96,"wall_rectangles":2715} UNITS {"culled":0,"draw_calls":15,"loaded_meshes":15,"lod_counts":[0,0,512],"triangles":49188,"visible":512} GPU_TRIANGLES 151778.0
+MODE 2 FRAME_MS_MEDIAN 4.574 P95 7.127 TERRAIN {"loaded_tiles":65,"lod":{"1":65,"2":0,"4":0,"8":0},"pending":0,"total_tiles":96,"triangles":151032,"visible_tiles":65} PROPS {"detail_instances":2426,"loaded_tiles":69,"queued_tiles":0,"total_tiles":96,"triangles":52080,"visible_tiles":65,"wall_rectangles":1914} UNITS {"culled":440,"draw_calls":21,"loaded_meshes":36,"lod_counts":[12,60,0],"triangles":40488,"visible":72} GPU_TRIANGLES 247204.0
+MODE 1 FRAME_MS_MEDIAN 5.317 P95 7.086 TERRAIN {"loaded_tiles":69,"lod":{"1":69,"2":0,"4":0,"8":0},"pending":0,"total_tiles":96,"triangles":157508,"visible_tiles":69} PROPS {"detail_instances":2497,"loaded_tiles":72,"queued_tiles":0,"total_tiles":96,"triangles":53640,"visible_tiles":69,"wall_rectangles":1973} UNITS {"culled":393,"draw_calls":22,"loaded_meshes":37,"lod_counts":[12,107,0],"triangles":54032,"visible":119} GPU_TRIANGLES 269048.0
+DASHBOARD_STREAM_CHECK_OK

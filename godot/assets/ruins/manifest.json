@@ -1,0 +1,311 @@
+{
+ "walls": [
+  {
+   "file": "walls/Gate.glb",
+   "size_m": [
+    1.0,
+    6.5,
+    6.6
+   ],
+   "kb": 281
+  },
+  {
+   "file": "walls/WallBrokenMD.glb",
+   "size_m": [
+    1.0,
+    3.6,
+    6.6
+   ],
+   "kb": 177
+  },
+  {
+   "file": "walls/WallBrokenXS.glb",
+   "size_m": [
+    1.0,
+    1.6,
+    6.6
+   ],
+   "kb": 88
+  },
+  {
+   "file": "walls/WallBrokenXl.glb",
+   "size_m": [
+    1.0,
+    6.5,
+    6.6
+   ],
+   "kb": 264
+  },
+  {
+   "file": "walls/WallEnd.glb",
+   "size_m": [
+    1.0,
+    6.4,
+    3.2
+   ],
+   "kb": 145
+  },
+  {
+   "file": "walls/WallEnd2.glb",
+   "size_m": [
+    1.0,
+    6.5,
+    4.3
+   ],
+   "kb": 172
+  },
+  {
+   "file": "walls/WallNormalMD.glb",
+   "size_m": [
+    1.0,
+    3.6,
+    6.6
+   ],
+   "kb": 175
+  },
+  {
+   "file": "walls/WallNormalXL.glb",
+   "size_m": [
+    1.0,
+    6.5,
+    6.6
+   ],
+   "kb": 312
+  },
+  {
+   "file": "walls/WallNormalXS.glb",
+   "size_m": [
+    1.0,
+    1.6,
+    6.6
+   ],
+   "kb": 91
+  }
+ ],
+ "walls_broken": [
+  {
+   "file": "walls_broken/WallBrokenMDdes.glb",
+   "size_m": [
+    1.038,
+    3.737,
+    4.701
+   ],
+   "kb": 184
+  },
+  {
+   "file": "walls_broken/WallBrokenXLdes.glb",
+   "size_m": [
+    1.033,
+    5.314,
+    7.336
+   ],
+   "kb": 299
+  },
+  {
+   "file": "walls_broken/WallBrokenXSdes.glb",
+   "size_m": [
+    1.051,
+    1.6,
+    5.245
+   ],
+   "kb": 97
+  },
+  {
+   "file": "walls_broken/WallNormalMDdes.glb",
+   "size_m": [
+    1.026,
+    4.46,
+    5.62
+   ],
+   "kb": 204
+  },
+  {
+   "file": "walls_broken/WallNormalXLdes.glb",
+   "size_m": [
+    1.054,
+    5.807,
+    4.484
+   ],
+   "kb": 377
+  },
+  {
+   "file": "walls_broken/WallNormalXSdes.glb",
+   "size_m": [
+    1.03,
+    1.643,
+    3.886
+   ],
+   "kb": 97
+  }
+ ],
+ "pillars": [
+  {
+   "file": "pillars/PillarRound.glb",
+   "size_m": [
+    1.6,
+    6.4,
+    1.6
+   ],
+   "kb": 205
+  },
+  {
+   "file": "pillars/PillarRoundCut.glb",
+   "size_m": [
+    1.6,
+    3.7,
+    1.6
+   ],
+   "kb": 138
+  },
+  {
+   "file": "pillars/PillarSquare.glb",
+   "size_m": [
+    2.4,
+    6.2,
+    2.4
+   ],
+   "kb": 502
+  },
+  {
+   "file": "pillars/PillarSquareCut.glb",
+   "size_m": [
+    2.4,
+    3.7,
+    2.4
+   ],
+   "kb": 296
+  }
+ ],
+ "blocks": [
+  {
+   "file": "blocks/BlockCrackMD.glb",
+   "size_m": [
+    6.6,
+    1.7,
+    6.6
+   ],
+   "kb": 385
+  },
+  {
+   "file": "blocks/BlockCrackXL.glb",
+   "size_m": [
+    6.6,
+    3.3,
+    6.6
+   ],
+   "kb": 545
+  },
+  {
+   "file": "blocks/BlockCrackXS.glb",
+   "size_m": [
+    6.6,
+    0.5,
+    6.6
+   ],
+   "kb": 265
+  },
+  {
+   "file": "blocks/BlockNormalMD.glb",
+   "size_m": [
+    6.6,
+    1.7,
+    6.6
+   ],
+   "kb": 233
+  },
+  {
+   "file": "blocks/BlockNormalXL.glb",
+   "size_m": [
+    6.6,
+    3.3,
+    6.6
+   ],
+   "kb": 441
+  },
+  {
+   "file": "blocks/BlockNormalXS.glb",
+   "size_m": [
+    6.6,
+    0.5,
+    6.6
+   ],
+   "kb": 155
+  }
+ ],
+ "stairs": [
+  {
+   "file": "stairs/StairBridge.glb",
+   "size_m": [
+    2.9,
+    1.7,
+    11.8
+   ],
+   "kb": 202
+  },
+  {
+   "file": "stairs/StairsMD.glb",
+   "size_m": [
+    2.6,
+    1.7,
+    2.8
+   ],
+   "kb": 53
+  },
+  {
+   "file": "stairs/StairsXL.glb",
+   "size_m": [
+    6.4,
+    2.2,
+    2.8
+   ],
+   "kb": 145
+  }
+ ],
+ "fences": [
+  {
+   "file": "fences/Corner.glb",
+   "size_m": [
+    2.8,
+    1.4,
+    2.8
+   ],
+   "kb": 70
+  },
+  {
+   "file": "fences/CornerTight.glb",
+   "size_m": [
+    1.8,
+    1.4,
+    1.8
+   ],
+   "kb": 50
+  },
+  {
+   "file": "fences/Fence.glb",
+   "size_m": [
+    1.0,
+    1.4,
+    2.8
+   ],
+   "kb": 52
+  },
+  {
+   "file": "fences/Line.glb",
+   "size_m": [
+    0.4,
+    0.7,
+    2.0
+   ],
+   "kb": 19
+  },
+  {
+   "file": "fences/Slope.glb",
+   "size_m": [
+    1.0,
+    1.4,
+    1.0
+   ],
+   "kb": 34
+  }
+ ]
+}

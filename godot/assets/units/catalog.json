@@ -1,0 +1,251 @@
+{
+  "format": "glTF 2.0 binary",
+  "coordinates": "+Y up, +X forward",
+  "display_only": true,
+  "models": [
+    {
+      "name": "scout_wheeled",
+      "lane": "none",
+      "chassis": "wheeled",
+      "file": "none_wheeled.glb",
+      "bytes": 292420,
+      "triangles": 2032,
+      "parts": 62,
+      "joints": 6,
+      "animations": [
+        "idle",
+        "move",
+        "scan",
+        "disabled"
+      ]
+    },
+    {
+      "name": "scout_tracked",
+      "lane": "none",
+      "chassis": "tracked",
+      "file": "none_tracked.glb",
+      "bytes": 527288,
+      "triangles": 3692,
+      "parts": 119,
+      "joints": 8,
+      "animations": [
+        "idle",
+        "move",
+        "scan",
+        "disabled"
+      ]
+    },
+    {
+      "name": "scout_legged",
+      "lane": "none",
+      "chassis": "legged",
+      "file": "none_legged.glb",
+      "bytes": 249704,
+      "triangles": 1780,
+      "parts": 45,
+      "joints": 6,
+      "animations": [
+        "idle",
+        "move",
+        "scan",
+        "disabled"
+      ]
+    },
+    {
+      "name": "scout_rotor",
+      "lane": "none",
+      "chassis": "rotor",
+      "file": "none_rotor.glb",
+      "bytes": 328968,
+      "triangles": 2156,
+      "parts": 51,
+      "joints": 6,
+      "animations": [
+        "idle",
+        "move",
+        "scan",
+        "disabled"
+      ]
+    },
+    {
+      "name": "digger_wheeled",
+      "lane": "scoop",
+      "chassis": "wheeled",
+      "file": "scoop_wheeled.glb",
+      "bytes": 336956,
+      "triangles": 2368,
+      "parts": 72,
+      "joints": 6,
+      "animations": [
+        "idle",
+        "move",
+        "dig",
+        "disabled"
+      ]
+    },
+    {
+      "name": "digger_tracked",
+      "lane": "scoop",
+      "chassis": "tracked",
+      "file": "scoop_tracked.glb",
+      "bytes": 571844,
+      "triangles": 4028,
+      "parts": 129,
+      "joints": 8,
+      "animations": [
+        "idle",
+        "move",
+        "dig",
+        "disabled"
+      ]
+    },
+    {
+      "name": "digger_legged",
+      "lane": "scoop",
+      "chassis": "legged",
+      "file": "scoop_legged.glb",
+      "bytes": 294240,
+      "triangles": 2116,
+      "parts": 55,
+      "joints": 6,
+      "animations": [
+        "idle",
+        "move",
+        "dig",
+        "disabled"
+      ]
+    },
+    {
+      "name": "digger_rotor",
+      "lane": "scoop",
+      "chassis": "rotor",
+      "file": "scoop_rotor.glb",
+      "bytes": 363712,
+      "triangles": 2492,
+      "parts": 61,
+      "joints": 6,
+      "animations": [
+        "idle",
+        "move",
+        "dig",
+        "disabled"
+      ]
+    },
+    {
+      "name": "carrier_wheeled",
+      "lane": "gripper",
+      "chassis": "wheeled",
+      "file": "gripper_wheeled.glb",
+      "bytes": 326692,
+      "triangles": 2256,
+      "parts": 68,
+      "joints": 8,
+      "animations": [
+        "idle",
+        "move",
+        "carry",
+        "disabled"
+      ]
+    },
+    {
+      "name": "carrier_tracked",
+      "lane": "gripper",
+      "chassis": "tracked",
+      "file": "gripper_tracked.glb",
+      "bytes": 563088,
+      "triangles": 3916,
+      "parts": 125,
+      "joints": 10,
+      "animations": [
+        "idle",
+        "move",
+        "carry",
+        "disabled"
+      ]
+    },
+    {
+      "name": "carrier_legged",
+      "lane": "gripper",
+      "chassis": "legged",
+      "file": "gripper_legged.glb",
+      "bytes": 284072,
+      "triangles": 2004,
+      "parts": 51,
+      "joints": 8,
+      "animations": [
+        "idle",
+        "move",
+        "carry",
+        "disabled"
+      ]
+    },
+    {
+      "name": "relay_wheeled",
+      "lane": "antenna",
+      "chassis": "wheeled",
+      "file": "antenna_wheeled.glb",
+      "bytes": 298184,
+      "triangles": 2072,
+      "parts": 64,
+      "joints": 6,
+      "animations": [
+        "idle",
+        "move",
+        "relay",
+        "disabled"
+      ]
+    },
+    {
+      "name": "relay_tracked",
+      "lane": "antenna",
+      "chassis": "tracked",
+      "file": "antenna_tracked.glb",
+      "bytes": 533056,
+      "triangles": 3732,
+      "parts": 121,
+      "joints": 8,
+      "animations": [
+        "idle",
+        "move",
+        "relay",
+        "disabled"
+      ]
+    },
+    {
+      "name": "relay_legged",
+      "lane": "antenna",
+      "chassis": "legged",
+      "file": "antenna_legged.glb",
+      "bytes": 255468,
+      "triangles": 1820,
+      "parts": 47,
+      "joints": 6,
+      "animations": [
+        "idle",
+        "move",
+        "relay",
+        "disabled"
+      ]
+    },
+    {
+      "name": "relay_rotor",
+      "lane": "antenna",
+      "chassis": "rotor",
+      "file": "antenna_rotor.glb",
+      "bytes": 334732,
+      "triangles": 2196,
+      "parts": 53,
+      "joints": 6,
+      "animations": [
+        "idle",
+        "move",
+        "relay",
+        "disabled"
+      ]
+    }
+  ],
+  "total_bytes": 5560424,
+  "total_triangles": 38660,
+  "runtime_file": "fleet.json",
+  "runtime_bytes": 995177
+}

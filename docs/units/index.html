@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SwarmMind / Rescue fleet</title><style>
+:root{color-scheme:dark;font-family:ui-sans-serif,system-ui,sans-serif;background:#101b24;color:#dfebe9}
+*{box-sizing:border-box}body{margin:0}main{max-width:1240px;margin:auto;padding:44px 32px 72px}
+.eyebrow,.card-head,small,footer,.clips{font-family:ui-monospace,monospace;font-size:11px;letter-spacing:.08em}
+.eyebrow{color:#72becf;display:flex;justify-content:space-between;padding-bottom:24px;border-bottom:1px solid #34424a}
+header{padding:46px 0 38px;max-width:880px}h1{font-size:clamp(38px,6vw,74px);font-weight:500;letter-spacing:-.05em;line-height:1.02;margin:12px 0 22px}
+header p{max-width:660px;font-size:17px;line-height:1.65;color:#acbfc5}a{color:inherit;text-decoration:none}a:hover{text-decoration:underline}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}.unit{border:1px solid #34424a;background:#14212b;overflow:hidden}
+.lane-none{--accent:#59c7ff}.lane-scoop{--accent:#ffbf3d}.lane-gripper{--accent:#78ff8c}.lane-antenna{--accent:#d682ff}
+.card-head{color:var(--accent);display:flex;justify-content:space-between;padding:19px 23px 0;gap:12px}
+.motion{width:100%;height:auto;display:block}.copy{padding:0 25px 25px}h2{font-size:31px;letter-spacing:-.025em;font-weight:500;margin:0 0 12px}
+.copy p{color:#a9bcc4;font-size:14px;line-height:1.7;min-height:70px;margin:0 0 23px;max-width:470px}
+.clips{display:flex;align-items:center;flex-wrap:wrap;gap:8px;letter-spacing:0}button{font:inherit;border:1px solid #4a5b64;background:none;color:#b9c9ce;padding:9px 12px;cursor:pointer}
+button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#14212b}.clips a{margin-left:auto;padding:9px 0;color:var(--accent)}
+.catalogue{margin-top:64px}.catalogue>p,.note{color:#99afb9;font-size:14px;line-height:1.7;max-width:780px}
+.variants{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:28px}.variant{display:block;border:1px solid #34424a;padding-bottom:18px}
+.variant img{display:block;width:100%;height:auto}.variant span,.variant small{display:block;margin:0 15px}.variant span{color:var(--accent);font-size:15px}.variant em{font-style:normal;color:#bac9cd;margin-left:5px}.variant small{color:#8096a1;font-size:10px;margin-top:9px;letter-spacing:0}
+footer{margin-top:48px;border-top:1px solid #34424a;padding-top:23px;color:#8096a1;line-height:1.8}
+@media(max-width:720px){main{padding:25px 16px}.grid{grid-template-columns:1fr}.variants{grid-template-columns:repeat(2,minmax(0,1fr))}.copy p{min-height:0}.eyebrow{font-size:9px}.card-head{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.motion{visibility:hidden}.unit{background-size:contain}}
+</style><main><div class="eyebrow"><span>SWARMMIND / FIELD ROBOTICS</span><span>DESIGN SERIES 01</span></div>
+<header><h1>One rescue.<br>Four kinds of help.</h1><p>A modular fleet for disaster search and rescue. Distinct tools make every role visible; interchangeable chassis make terrain capability visible. Fifteen original 3D models, each with named animation clips.</p></header>
+<div class="grid"><article class="unit lane-none">
+<div class="card-head"><span>01 / NONE</span><span>WHEELED CHASSIS</span></div>
+<img class="motion" src="scout_wheeled_work.png" alt="Animated scout robot" width="440" height="370">
+<div class="copy"><h2>Scout</h2><p>Find casualties through an occluded camera. A compact stereo head makes the scout readable at a glance.</p>
+<div class="clips"><button data-src="scout_wheeled_work.png" aria-pressed="true">Scan</button>
+<button data-src="scout_wheeled_move.png" aria-pressed="false">Locomotion</button>
+<a href="../../godot/assets/units/none_wheeled.glb" download>Download GLB ↗</a></div></div></article>
+<article class="unit lane-scoop">
+<div class="card-head"><span>02 / SCOOP</span><span>TRACKED CHASSIS</span></div>
+<img class="motion" src="digger_tracked_work.png" alt="Animated digger robot" width="440" height="370">
+<div class="copy"><h2>Digger</h2><p>Uncover buried casualties. Reinforced lift arms, hydraulic rods and a toothed bucket show the excavation stroke.</p>
+<div class="clips"><button data-src="digger_tracked_work.png" aria-pressed="true">Dig</button>
+<button data-src="digger_tracked_move.png" aria-pressed="false">Locomotion</button>
+<a href="../../godot/assets/units/scoop_tracked.glb" download>Download GLB ↗</a></div></div></article>
+<article class="unit lane-gripper">
+<div class="card-head"><span>03 / GRIPPER</span><span>LEGGED CHASSIS</span></div>
+<img class="motion" src="carrier_legged_work.png" alt="Animated carrier robot" width="440" height="370">
+<div class="copy"><h2>Carrier</h2><p>Carry casualties to collection points. Padded jaws secure a visible rescue cradle and blanket.</p>
+<div class="clips"><button data-src="carrier_legged_work.png" aria-pressed="true">Carry</button>
+<button data-src="carrier_legged_move.png" aria-pressed="false">Locomotion</button>
+<a href="../../godot/assets/units/gripper_legged.glb" download>Download GLB ↗</a></div></div></article>
+<article class="unit lane-antenna">
+<div class="card-head"><span>04 / ANTENNA</span><span>ROTOR CHASSIS</span></div>
+<img class="motion" src="relay_rotor_work.png" alt="Animated relay robot" width="440" height="370">
+<div class="copy"><h2>Relay</h2><p>Keep the swarm in contact. A telescopic mast and articulated panel antenna distinguish a relay holding its post.</p>
+<div class="clips"><button data-src="relay_rotor_work.png" aria-pressed="true">Relay</button>
+<button data-src="relay_rotor_move.png" aria-pressed="false">Locomotion</button>
+<a href="../../godot/assets/units/antenna_rotor.glb" download>Download GLB ↗</a></div></div></article></div>
+<section class="catalogue"><h2>The full fleet</h2><p>Four purposes × four chassis. Carriers stay on the ground: rotor units cannot lift casualties. Select any model to download its editable, self-contained GLB.</p>
+<div class="variants"><a class="variant lane-none" href="../../godot/assets/units/none_wheeled.glb" download>
+<img loading="lazy" src="scout_wheeled_small.png" alt="Scout on wheeled chassis" width="330" height="285">
+<span>Scout <em>wheeled</em></span><small>2,032 triangles · 4 clips ↗</small></a>
+<a class="variant lane-none" href="../../godot/assets/units/none_tracked.glb" download>
+<img loading="lazy" src="scout_tracked_small.png" alt="Scout on tracked chassis" width="330" height="285">
+<span>Scout <em>tracked</em></span><small>3,692 triangles · 4 clips ↗</small></a>
+<a class="variant lane-none" href="../../godot/assets/units/none_legged.glb" download>
+<img loading="lazy" src="scout_legged_small.png" alt="Scout on legged chassis" width="330" height="285">
+<span>Scout <em>legged</em></span><small>1,780 triangles · 4 clips ↗</small></a>
+<a class="variant lane-none" href="../../godot/assets/units/none_rotor.glb" download>
+<img loading="lazy" src="scout_rotor_small.png" alt="Scout on rotor chassis" width="330" height="285">
+<span>Scout <em>rotor</em></span><small>2,156 triangles · 4 clips ↗</small></a>
+<a class="variant lane-scoop" href="../../godot/assets/units/scoop_wheeled.glb" download>
+<img loading="lazy" src="digger_wheeled_small.png" alt="Digger on wheeled chassis" width="330" height="285">
+<span>Digger <em>wheeled</em></span><small>2,368 triangles · 4 clips ↗</small></a>
+<a class="variant lane-scoop" href="../../godot/assets/units/scoop_tracked.glb" download>
+<img loading="lazy" src="digger_tracked_small.png" alt="Digger on tracked chassis" width="330" height="285">
+<span>Digger <em>tracked</em></span><small>4,028 triangles · 4 clips ↗</small></a>
+<a class="variant lane-scoop" href="../../godot/assets/units/scoop_legged.glb" download>
+<img loading="lazy" src="digger_legged_small.png" alt="Digger on legged chassis" width="330" height="285">
+<span>Digger <em>legged</em></span><small>2,116 triangles · 4 clips ↗</small></a>
+<a class="variant lane-scoop" href="../../godot/assets/units/scoop_rotor.glb" download>
+<img loading="lazy" src="digger_rotor_small.png" alt="Digger on rotor chassis" width="330" height="285">
+<span>Digger <em>rotor</em></span><small>2,492 triangles · 4 clips ↗</small></a>
+<a class="variant lane-gripper" href="../../godot/assets/units/gripper_wheeled.glb" download>
+<img loading="lazy" src="carrier_wheeled_small.png" alt="Carrier on wheeled chassis" width="330" height="285">
+<span>Carrier <em>wheeled</em></span><small>2,256 triangles · 4 clips ↗</small></a>
+<a class="variant lane-gripper" href="../../godot/assets/units/gripper_tracked.glb" download>
+<img loading="lazy" src="carrier_tracked_small.png" alt="Carrier on tracked chassis" width="330" height="285">
+<span>Carrier <em>tracked</em></span><small>3,916 triangles · 4 clips ↗</small></a>
+<a class="variant lane-gripper" href="../../godot/assets/units/gripper_legged.glb" download>
+<img loading="lazy" src="carrier_legged_small.png" alt="Carrier on legged chassis" width="330" height="285">
+<span>Carrier <em>legged</em></span><small>2,004 triangles · 4 clips ↗</small></a>
+<a class="variant lane-antenna" href="../../godot/assets/units/antenna_wheeled.glb" download>
+<img loading="lazy" src="relay_wheeled_small.png" alt="Relay on wheeled chassis" width="330" height="285">
+<span>Relay <em>wheeled</em></span><small>2,072 triangles · 4 clips ↗</small></a>
+<a class="variant lane-antenna" href="../../godot/assets/units/antenna_tracked.glb" download>
+<img loading="lazy" src="relay_tracked_small.png" alt="Relay on tracked chassis" width="330" height="285">
+<span>Relay <em>tracked</em></span><small>3,732 triangles · 4 clips ↗</small></a>
+<a class="variant lane-antenna" href="../../godot/assets/units/antenna_legged.glb" download>
+<img loading="lazy" src="relay_legged_small.png" alt="Relay on legged chassis" width="330" height="285">
+<span>Relay <em>legged</em></span><small>1,820 triangles · 4 clips ↗</small></a>
+<a class="variant lane-antenna" href="../../godot/assets/units/antenna_rotor.glb" download>
+<img loading="lazy" src="relay_rotor_small.png" alt="Relay on rotor chassis" width="330" height="285">
+<span>Relay <em>rotor</em></span><small>2,196 triangles · 4 clips ↗</small></a></div></section>
+<p class="note">These are studio animation previews. In the live dashboard, measured travel drives wheels and legs, excavation telemetry drives buckets, and carrying activity controls the rescue load. Rotor mechanisms animate at ground height because the dashboard has no airborne telemetry.</p>
+<footer>Original procedural geometry · no texture downloads · glTF 2.0<br>Display models for a custom 2.5D kinematic simulator. <a href="../UNIT_MODELS.md">Design and integration notes ↗</a></footer></main>
+<script>
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+document.querySelectorAll('.unit').forEach(card => {
+  const img=card.querySelector('.motion');
+  if(reduced){img.src=img.src.replace('_work.png','.png');img.style.visibility='visible'}
+  card.querySelectorAll('button').forEach(button => button.addEventListener('click', () => {
+    img.src=button.dataset.src;img.style.visibility='visible';
+    card.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
+  }));
+});
+</script></html>
