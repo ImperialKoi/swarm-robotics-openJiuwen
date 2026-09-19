@@ -8,6 +8,15 @@ set -euo pipefail
 
 MODEL="${1:-assets/models/hivemind-base.gguf}"
 PORT="${PORT:-8080}"
+CTX_SIZE="${CTX_SIZE:-4096}"
+LLAMA_BIN="${LLAMA_BIN:-llama}"
+LLAMA_TEMPLATE_ARGS=()
+if [ -n "${CHAT_TEMPLATE:-}" ]; then
+  LLAMA_TEMPLATE_ARGS=(--chat-template "$CHAT_TEMPLATE")
+fi
+if ! command -v "$LLAMA_BIN" >/dev/null 2>&1 && [ -x "$HOME/.llama-app/llama" ]; then
+  LLAMA_BIN="$HOME/.llama-app/llama"
+fi
 
 if [ ! -e "$MODEL" ]; then
   echo "no model at $MODEL" >&2
@@ -18,6 +27,6 @@ if [ ! -e "$MODEL" ]; then
   exit 1
 fi
 
-# --ctx-size 4096 is ample: the prompt is ~1.4 KB and independent of swarm size.
+# 4096 covers the original advisor; use CTX_SIZE=8192 for the native response team.
 # --no-webui keeps the footprint down; see MEASUREMENTS.md M-29 (829 MB steady).
-exec llama serve -m "$MODEL" --port "$PORT" --ctx-size 4096 --no-webui --jinja
+exec "$LLAMA_BIN" serve -m "$MODEL" --port "$PORT" --ctx-size "$CTX_SIZE" --parallel 1 --no-webui --jinja "${LLAMA_TEMPLATE_ARGS[@]}"

@@ -45,6 +45,8 @@ robots_per_lane: 4
 victims:
   count: 8
   buried_count: 4              # require a scoop robot before a gripper can extract
+  cover_fraction: 0.85
+  cover_radius_m: 3.0
   min_separation_m: 12.0
   distance_weight_exp: 1.5     # bias placement away from base
   clear_rate: 0.25             # debris fraction per second per digger in reach

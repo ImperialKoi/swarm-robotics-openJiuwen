@@ -1,16 +1,16 @@
 # SwarmMind — Technical Plan
 
 Companion to [PLAN.md](PLAN.md). This is the design of record: interfaces, algorithms, schemas, numbers.
-Anything here marked **FROZEN** must not change without updating every consumer in the same commit.
+Anything here marked **FROZEN** must not change after D7 without updating every consumer in the same commit.
 
 **Optional extension:** the opt-in response team is specified in
-[MULTI_AGENT_DEMO.md](MULTI_AGENT_DEMO.md). It runs WorkSwarm in an isolated process,
+[MULTI_AGENT_DEMO.md](MULTI_AGENT_DEMO.md). It runs native WorkSwarm `TeamAgent` Leader/Teammate coordination in an isolated process,
 uses detached observed-state tools, and returns peer-reviewed proposals to the existing
 HivemindNode filter on the simulation thread. Private traces do not extend the frozen
 bus contracts. Existing scripted fallback and 30-second directive expiry remain active;
 team leases prevent fallback from overwriting a live reviewed order in the same sector.
-M-79 records the actual runtime and memory measurements, superseding budget assumptions
-for this optional configuration.
+M-79 records the earlier SwarmFlow runtime and memory measurements. M-82 records
+the native Leader/Teammate migration and its verification limits.
 
 ---
 
@@ -59,13 +59,13 @@ blackboard auction hivemind hazard  events  fault_injector
 ```
 swarm-robotics/
 ├── CLAUDE.md
-├── SHIPPING.md                    # what is trained vs heuristic
+├── SHIPPING.md                    # written D12: what is trained vs heuristic
 ├── pyproject.toml                 # uv, requires-python = ">=3.12,<3.13"
 ├── Makefile                       # make check / demo / headless / stress
 ├── docs/
 │   ├── PLAN.md  TECHNICAL.md  RUNBOOK.md
 ├── swarmmind/
-│   ├── contracts/                 # ★ FROZEN — the interface contract
+│   ├── contracts/                 # ★ FROZEN D7 — the interface contract
 │   │   ├── topics.py              # topic name constants
 │   │   ├── schemas.py             # pydantic models, §4
 │   │   └── version.py             # SCHEMA_VERSION = "1.0"
@@ -143,10 +143,35 @@ class Victim:
     carrier: str | None
 ```
 
-Placement: 80 victims drawn from reachable free cells, weighted by `geodesic_distance_to_base ** 1.5` (geodesic, not euclidean — a victim behind a wall should read as far away). Weighted-without-replacement via a **Gumbel top-k** draw, not `rng.choice(replace=False, p=…)`, which is an O(n·k) Python loop over ~44k candidate cells. Minimum pairwise separation 14 m. 32 flagged `buried`, drawn from the farthest 60%.
+Placement: counts and preferences live in `assets/scenarios/*.yaml`.
+The demo has **110 casualties, 44 buried**. Its `cover_fraction: 0.85` targets 94 sites
+within `cover_radius_m: 3.0` of rubble or solid obstacles, with 16 exposed sites.
+Buried casualties first use traversable rubble, then debris margins, then wall margins.
+Surface casualties assigned cover prefer wall margins, where actual occupancy can
+occlude the camera. The artificial map border does not count as shelter. These are
+debris sites and sheltered margins in the custom 2.5D kinematic simulator, not simulated
+building interiors or underground cavities.
+
+Every candidate is on dry ground, outside the base/collection keepouts, with one-cell
+wall clearance, fine-grid legged access, and reachability on the same edge-aware coarse
+grid used by `NavFields`. Within each habitat, a **Gumbel weighted draw** retains the
+scenario's geodesic distance bias (`distance_weight_exp: 0.4` in the demo). The victims
+RNG stream alone selects sites. Minimum separation remains 14 m on all four demo maps.
+On sparse or crowded custom maps, habitat preference falls back to other safe sites and
+spacing can relax; clearance, dry ground and reachability never relax. Counts stay exact,
+or construction reports that there are too few safe cells.
+
+This replaces the old open-ground draw and farthest-60% burial rule. It intentionally
+changes casualty coordinates and scorecard hashes from earlier builds; repeat runs of
+the new seed-42 scenario remain identical. Historical gates describe the earlier
+casualty distribution. No new demo performance gate is claimed (M-83).
 
 **Rescue chain (this is what forces all four lanes to matter):**
-`hidden → found` (any robot within `sensor_radius`, in comms) → `found → cleared` (scoop robot at the victim reduces `debris_remaining` to 0 at `0.25/s`; non-buried victims start cleared) → `cleared → carried` (gripper robot attaches; carrier speed ×0.6 while loaded) → `carried → rescued` (carrier reaches an extraction zone).
+`hidden → found` (a report from the occluded camera detector resolves onto a casualty;
+out-of-comms sightings buffer until reconnection) → `found → cleared` (scoop robots
+reduce `debris_remaining` to 0; surface casualties need no excavation) →
+`cleared → carried` (a gripper attaches; loaded speed follows `carry_speed_factor`) →
+`carried → rescued` (the carrier reaches a collection point).
 
 Only `rescued` counts. Extraction zones, radius 6 m: base `(12,16)`, three corners, and **a centre zone at `(160,104)`**. The corners alone leave the map centre 160 m from the nearest zone — a 3.7-minute one-way trip for a loaded carrier at 0.72 m/s. With the centre zone: median 64 m, worst 108 m. Asserted in `tests/test_world.py`, which is how the missing zone was caught.
 
@@ -193,6 +218,25 @@ class RobotBody:
 
 Speed and size are *coupled* through `v_max ∝ motor_power / mass` — the fast/light ↔ slow/heavy tradeoff is emergent from the genome, not a hand-set dial. Unicycle kinematics, `dt = 0.05 s`, circle-vs-grid collision with slide response.
 
+**Rotor flight:** scouts, diggers and relays can have rotor chassis; carriers
+cannot. Mission chooses airborne/landed mode before Tier 1 steering. Airborne rotors
+use direct horizontal guidance and open-air route/bid fields, cross ground obstacles
+at twice their rated speed without rubble drag, and separate from other aircraft rather
+than ground traffic. Tier 1 still enforces map bounds and observed-hazard avoidance;
+grounded chassis keep their swept-footprint safety checks. Landing requires dry,
+traversable support for the whole body. A rotor over unseen suitable ground stops and
+lands to inspect; it stays aloft over walls, water and unlandable slopes. Airborne units
+cannot perceive, dig or recharge. Ground and flight share the same FastSim/DemoSim code.
+An out-of-contact rotor remembers its own last inspection cell, so buffered observations
+do not prevent takeoff; they still remain private until reconnection.
+
+The simulation remains **custom 2.5D kinematics**, with a binary flight layer. Its visual
+altitude is a deterministic terrain-following envelope in `viz/terrain_surface.py`,
+ported to Godot: 8 m clearance, a 0.5 rise/run bound per horizontal axis, and conservative
+support over the rotor footprint and terrain strides through 8. This produces climbing
+approaches to mountains without adding 3D physics or reading display heights in control.
+No learned component was enabled or re-gated by this change.
+
 ### 3.7 Battery
 
 `0.05 %/s` idle + `0.20 %/s` moving (scaled by `v/v_max`) + `1.5 %/s` in hazard. No recharge. Sized so a robot lasts ~500 s of continuous motion — long enough to finish, short enough that battery is a live term in the bid function.
@@ -221,7 +265,7 @@ Three things must be true for that sweep to be honest, and all three are design 
 2. **Fog updates are decimated** to 5 Hz with a movement gate. See §3.2.
 3. **Nothing in the tick loop iterates robots in Python.** If a profile shows a `for` over robots outside of the 5 Hz sensor pass, that is the bug.
 
-Re-run the sweep with Godot and `llama-server` resident — the ceiling under real memory pressure is the one that matters, and on 8 GB it will be lower than the clean-room number.
+Re-run the sweep on **D7** with Godot and `llama-server` resident — the ceiling under real memory pressure is the one that matters, and on 8 GB it will be lower than the clean-room number.
 
 ---
 
@@ -282,7 +326,7 @@ world   = pos + R(θ) @ (forward, lateral)
   column's visible range are blacked out.
 - Runs at **5 Hz** with the same half-cell movement gate as the old fog pass.
 
-Cost scales with `robots x H x W`, not with world size. Measure it and record in
+Cost scales with `robots x H x W`, not with world size. Measure it at D3 and record in
 MEASUREMENTS.md; if it does not fit, drop `H x W` before dropping `N`.
 
 ### 3.9.4 Detectors — classical first, learned must beat it
@@ -294,7 +338,7 @@ hue band, morphological cleanup, connected components, area and aspect gates. Pu
 ML runtime, no install, deterministic. Emits `(bearing, range, confidence)` per blob, which the
 camera geometry converts back to a world position.
 
-**`perception/cnn.py` — trains on Kaggle GPU.** Small conv net over the 48x48x3 batch,
+**`perception/cnn.py` — trains on Kaggle GPU (D11).** Small conv net over the 48x48x3 batch,
 trained on rendered frames with ground-truth labels from the simulator. Must beat the classical
 detector on held-out seeds at the gate (§8) or the classical one ships.
 
@@ -321,7 +365,7 @@ Promotion needs **both** of:
   precision curve (full below 2 m, zero beyond 5 m). A crowd of distant, near-worthless
   sightings must not promote each other.
 
-**Resolution** happens when any robot comes within 3 m: it either matches a real
+**Resolution** happens when a grounded, in-contact robot comes within 3 m: it either matches a real
 casualty (`mark_found`) or is **dismissed**. Dismissed reports are kept for the whole
 mission and absorb later sightings of the same spot -- they are the swarm's memory of
 "we looked there, nobody home". Without that, a robot walks to a rock, sees nothing, and
@@ -357,7 +401,7 @@ renderer — say *2.5D top-down egocentric imagery*, and say which detector actu
 
 ---
 
-## 4. Contract — **FROZEN**
+## 4. Contract — **FROZEN at D7**
 
 Topic names are exactly the original spec's. Every payload carries `"schema": "1.0"`. Defined once in `swarmmind/contracts/schemas.py` as pydantic models; **no other module may define these shapes**, and the Godot client parses these and only these.
 
@@ -725,9 +769,9 @@ Each row stores the world snapshot (so `rollout.score` can restore it), the rend
 
 | | Method | TRL / Unsloth | Session | Ships as |
 |---|---|---|---|---|
-| **R1** | RAFT | sample G=8, keep argmax, `SFTTrainer` | ~2–3 h T4 | gate-approved checkpoint |
-| **R2** | DPO | (argmax, argmin) pairs, `DPOTrainer`, β=0.1 | ~2–3 h T4 | gate-approved upgrade |
-| **R3** | GRPO | `GRPOTrainer`, G=8, `loss_type="dr_grpo"`, vLLM generation via Unsloth `fast_inference=True` | 6–9 h T4 | gate-approved upgrade |
+| **R1** | RAFT | sample G=8, keep argmax, `SFTTrainer` | ~2–3 h T4 | banked D10 |
+| **R2** | DPO | (argmax, argmin) pairs, `DPOTrainer`, β=0.1 | ~2–3 h T4 | banked D11am |
+| **R3** | GRPO | `GRPOTrainer`, G=8, `loss_type="dr_grpo"`, vLLM generation via Unsloth `fast_inference=True` | 6–9 h T4 | D11pm |
 
 Common: `Qwen2.5-1.5B-Instruct`, LoRA `r=16, α=32`, 4-bit base, `lr 5e-6` (GRPO) / `1e-5` (SFT/DPO), `max_prompt_len 1024`, `max_completion_len 256`.
 
@@ -737,7 +781,7 @@ Common: `Qwen2.5-1.5B-Instruct`, LoRA `r=16, α=32`, 4-bit base, `lr 5e-6` (GRPO
 
 - Checkpoint every 100 steps **and** at 8 h wall clock, to `/kaggle/working/ckpt/`.
 - `/kaggle/working` is **not** ambiently persistent. It survives as a *saved notebook version's output*. To resume: Save Version, then attach that version's output (or a private Dataset) as an input to the next run and `resume_from_checkpoint`.
-- Implement the resume path before the first session.
+- Write the resume path on D10, before the first session, not after losing one.
 - GPU quota ~30 h/week; CPU sessions are a separate ~30 h/week and are where MAP-Elites goes.
 
 ### 7.6 Export to GGUF
@@ -755,7 +799,7 @@ merge LoRA into base (fp16)
 
 ## 7a. Unit policy — behaviour cloning → PPO (branch `rl/unit-policy`)
 
-A per-robot decision layer inside Tier 2 for robots with nothing urgent. Record of the programme: [training_notes/run4-unit-policy.md](../training_notes/run4-unit-policy.md). Scope and adoption criteria: [PLAN.md §7.8](PLAN.md).
+A per-robot decision layer inside Tier 2 for robots with nothing urgent. Record of the programme: [training_notes/run4-unit-policy.md](../training_notes/run4-unit-policy.md). Scope and priorities: [PLAN.md §7.8](PLAN.md).
 
 **What it decides.** Once per auction cycle, after the auction has allocated, every in-contact carrier, digger and scout that is idle or holding `explore` (not carrying, not a relay, at most every 5 s per robot) picks one of five candidates:
 
@@ -803,7 +847,7 @@ uv run python -m swarmmind.training.gate --seeds 10 --report SHIPPING.md
 
 **Held-out seeds (D9):** `HELD_OUT_SEEDS = (101 … 110)`, disjoint from `mapelites.evaluate.TRAIN_SEEDS = (11, 12, 13)` and asserted so by `tests/test_evaluate.py`. Training may never touch them.
 
-**The gate judges on the four demo maps by default** (`demo.yaml` `demo_seeds`, 42–45) — the only maps the demo plays. `gate.py --held-out` still runs 101–110. Two sections were added on branch `rl/unit-policy`: **zone routing** (evolved roster vs + routing) and **the unit policy** (routing-alone, heuristic staging, and the trained checkpoint from `runs/rl/policy_best.npz` if present, judged against the *better* of the first two). The bodies and detector were trained on other seeds, so the demo maps are unseen for them; the unit policy was trained on these maps, and `SHIPPING.md` says so in its section.
+**Revised: the gate judges on the four demo maps by default** (`demo.yaml` `demo_seeds`, 42–45) — the only maps the demo plays. `gate.py --held-out` still runs 101–110. Two sections were added on branch `rl/unit-policy`: **zone routing** (evolved roster vs + routing) and **the unit policy** (routing-alone, heuristic staging, and the trained checkpoint from `runs/rl/policy_best.npz` if present, judged against the *better* of the first two). The bodies and detector were trained on other seeds, so the demo maps are unseen for them; the unit policy was trained on these maps, and `SHIPPING.md` says so in its section.
 
 **The control arm is `genes=None`, not an all-0.5 genome.** The gene-driven bid carries four terms the classical bid does not have at all (`frontier_gain`, `revisit_penalty`, `comms_tether`, `battery_reserve`), so a midpoint genome is already a richer policy — on `test`/seed 42 it explores 47.7% against the classical 35.8%. Gating against it would credit evolution with a change that was made by hand, so `run_mission()` and `gate.classical_baseline()` both pass no genome.
 
@@ -856,6 +900,13 @@ Client → server: `{"t":"cmd","cmd":"reset"|"focus","arg":...}` only. Every tog
 
 Send queue is drop-oldest for `state` (idempotent snapshots — a dropped frame is invisible) and never-drop for `event` and `directive` (they are the narrative).
 
+The compact dashboard `state` retains its eight-column `r` rows. An additive optional
+`flight: {"airborne": [bool, ...]}` object is defined by `DashboardFlight` in
+`contracts/schemas.py`, with the same robot ordering. The bridge masks out non-rotor
+and disabled units. Godot uses this actual state for models, cameras, culling and picking;
+old recordings with no flight object remain grounded, and reconnect clears old flags.
+The bus `RobotState`, topic names and existing row positions remain compatible.
+
 ### 10.2 Rendering
 
 - `MapView`: static grid drawn once to a `TextureRect`. Fog as a shader sampling an `explored` mask texture updated per `state` frame — one texture upload per frame beats 24k node updates.
@@ -867,6 +918,24 @@ Send queue is drop-oldest for `state` (idempotent snapshots — a dropped frame 
 - Comms links: `Line2D` between antenna robots and their component neighbours (P2).
 
 ---
+
+### 10.3 Simulated thermal display
+
+`H` switches the selected unit's POV/chase display between normal and thermal;
+orbit suspends thermal. `viz/thermal.py` is the offline reference for
+`godot/scripts/thermal_vision.gd` and its two shaders. The existing frozen truth row
+supplies position, state and original burial condition. Only HIDDEN/FOUND casualties
+with `buried` set receive the dim cover signature; CLEARED casualties receive the
+exposed signature, and CARRIED/RESCUED sources disappear from the ground.
+
+This operator visualisation does not feed the autonomous detector. It constrains
+sources to a 90° cone and 26 m range with quarter-cell wall sampling, then depth-tests
+the body/cover meshes against the actual rendered terrain. A deterministic position
+hash and simulation-time shimmer provide variation without consuming a simulation
+RNG. Two shared MultiMeshes encode heat into a reserved saturated-magenta colour;
+a screen pass converts those surfaces to an iron-like palette and cools the scene.
+The screen pass precedes the HUD. It adds no viewport, model, process or wire field.
+Intensities are illustrative surface heat, not calibrated temperatures.
 
 ## 11. Testing
 
@@ -881,7 +950,7 @@ Send queue is drop-oldest for `state` (idempotent snapshots — a dropped frame 
 | `test_mission.py` | full headless mission, seed 42, **with the hivemind disabled** → the swarm allocates, executes, self-heals and finds casualties with Tier 3 silent. This is the "swarm survives without the LLM" claim, as a test. Runs against `test.yaml` and is deliberately **not** a mission-quality benchmark — that is `scripts/baseline_sweep.py` on demo seeds, per [PLAN.md §6.1](PLAN.md) |
 | `test_comms.py` | a robot outside the component does not update the blackboard; reconnect flushes the buffer |
 
-`make check` = `ruff check` + `pytest` + the tiny fixture headless mission. Green on every commit.
+`make check` = `ruff check` + `pytest` + `run --headless --seed 42`. Green on every commit from D3 onward.
 
 ---
 
@@ -915,8 +984,8 @@ Only if everything else is done. Docker `linux/arm64`, `ros:humble` + Gazebo, XQ
 
 ---
 
-## 14. Open questions
+## 14. Open questions for D1
 
-1. Godot 4.4 vs 4.5 — pick whichever has the stabler macOS arm64 build and pin it in `RUNBOOK.md`.
+1. Godot 4.4 vs 4.5 — pick whichever has the stabler macOS arm64 build on D1 and pin it in `RUNBOOK.md`.
 2. Qwen2.5-1.5B vs 3B — start at 1.5B (fits T4 GRPO comfortably, ~1.0 GB local). Revisit only if the gate shows the 1.5B can't hold the JSON schema *and* reason.
 3. Whether `retreat` should be a task or a Tier-1 override. Task, for now — it shows up in the event log, which is worth more than the marginal robustness.

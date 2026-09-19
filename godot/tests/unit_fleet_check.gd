@@ -22,6 +22,10 @@ func _ground_pose(x: float, z: float, heading: float, _chassis: int) -> Transfor
 	return Transform3D(Basis(Vector3.UP, -heading), Vector3(x, ground_level, z))
 
 
+func _flight_pose(x: float, z: float, heading: float, _chassis: int) -> Transform3D:
+	return Transform3D(Basis(Vector3.UP, -heading), Vector3(x, 12.0, z))
+
+
 func _run() -> void:
 	root.size = Vector2i(1280, 720)
 	var fleet := Fleet.new()
@@ -150,6 +154,34 @@ func _run() -> void:
 	fleet.reset_motion()
 	fleet.update_view(camera, 39)
 	_expect(fleet.stats["visible"] == 0, "Reconnect drew units before a new trajectory arrived")
+	# Actual airborne telemetry positions/culls the aircraft at altitude immediately,
+	# including when a ground-level object at the same x/z would be outside the view.
+	var aircraft: Array = [[0.0, 0.0, 0.0, 0, 0, 1.0, 3, 2],
+		[4.0, 0.0, 0.0, 0, 0, 1.0, 0, 2]]
+	fleet.sync_state(aircraft, [], 3.0, 12.0, height, 1.0, 360, 240,
+		_ground_pose, Callable(), [true, true], _flight_pose)
+	camera.position = Vector3(0, 12, 8)
+	camera.look_at(Vector3(0, 12, 0))
+	camera.fov = 30.0
+	fleet.update_view(camera, 0)
+	_expect(fleet._slot_batches[0] >= 0 and fleet._poses[0].origin.y == 12.0,
+		"Airborne rotor was culled or placed at its ground position")
+	_expect(fleet._airborne[1] == 0, "Flight telemetry must not lift a wheeled unit")
+	fleet.invalidate_grounding()
+	fleet.update_view(camera, 0)
+	_expect(fleet._poses[0].origin.y == 12.0, "Terrain LOD change grounded an aircraft")
+	aircraft[0][4] = 2
+	fleet.sync_state(aircraft, [], 3.1, 12.1, height, 1.0, 360, 240,
+		_ground_pose, Callable(), [true, false], _flight_pose)
+	_expect(fleet._airborne[0] == 0 and fleet._states[0] == Fleet.DISABLED,
+		"Disabled aircraft kept flying/spinning")
+	aircraft[0][4] = 0
+	fleet.sync_state(aircraft, [], 3.2, 12.2, height, 1.0, 360, 240, _ground_pose)
+	camera.position = Vector3(0, 3, 8)
+	camera.look_at(Vector3(0, 0.7, 0))
+	fleet.update_view(camera, 0)
+	_expect(fleet._airborne[0] == 0 and is_equal_approx(fleet._poses[0].origin.y, ground_level),
+		"Landing or an old recording retained the previous flight altitude")
 	print("FLEET_LOD_CHECK ", JSON.stringify({"overview": overview,
 		"cpu_update_ms": update_ms, "failures": failures}))
 	if failures == 0:

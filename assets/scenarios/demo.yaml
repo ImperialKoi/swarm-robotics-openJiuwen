@@ -124,6 +124,8 @@ victims:
   # the rate; 110 adds 37% more work at the same conversion.
   count: 110
   buried_count: 44             # 40% require a scoop robot before a gripper can extract
+  cover_fraction: 0.85        # target at rubble/obstacle margins; some remain exposed
+  cover_radius_m: 3.0         # buried sites prefer rubble, surface sites prefer shelter
   min_separation_m: 14.0
   distance_weight_exp: 0.4     # mild bias away from base -- NOT 1.5, see below.
                                #

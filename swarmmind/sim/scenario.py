@@ -90,6 +90,16 @@ class VictimCfg:
     distance_weight_exp: float
     clear_rate: float        # debris fraction cleared per second per scoop robot
     carry_speed_factor: float
+    #: Target share at debris/obstacle margins; the remainder prefer exposed ground.
+    cover_fraction: float = 0.85
+    #: Distance from actual rubble or an interior wall, in metres, not grid cells.
+    cover_radius_m: float = 3.0
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.buried_count <= self.count:
+            raise ValueError("victims.buried_count must be between zero and victims.count")
+        if not 0 <= self.cover_fraction <= 1 or not self.cover_radius_m > 0:
+            raise ValueError("victims.cover_fraction must be in [0, 1]; cover_radius_m must be > 0")
 
 
 @dataclass(frozen=True)

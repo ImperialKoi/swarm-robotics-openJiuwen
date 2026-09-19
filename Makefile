@@ -2,7 +2,7 @@ PY := uv run python
 
 .PHONY: check test lint smoke headless demo stress evolve gate kaggle-bundle clean
 
-## Must be green on every commit.
+## Must be green on every commit from D3 onward.
 check: lint test smoke
 
 lint:
@@ -28,7 +28,7 @@ demo:
 demo-test:
 	$(PY) -m swarmmind.cli run --demo --scenario test
 
-## Robot-count sweep -> ceiling at RTF 0.8x -> ship 80% of it.
+## Robot-count sweep -> ceiling at RTF 0.8x -> ship 80% of it.  (D2)
 stress:
 	$(PY) scripts/stress.py
 

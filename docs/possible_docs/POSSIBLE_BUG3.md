@@ -4,7 +4,7 @@
 progresses the exploration rate just goes slower and slower."
 
 **Status:** diagnosed, **not fixed**. Nothing in the working tree was modified to produce
-any number below. Investigated against `f9b8b8f`.
+any number below. Recorded (D13), against `f9b8b8f`.
 
 All measurements are `demo`, **seed 42**. Unless a row says otherwise they come from
 `Mission(scn, 42, hivemind=False)` — Tier 3 off, which is the control condition
@@ -270,7 +270,7 @@ $ time uv run python -m swarmmind.cli run --headless --seed 42
   ground explored     76.2%
   wall / rtf          434.32s / 0.97x
   hash                f7e7755146e16ffc
-  424.65s user  7:29.74 total
+  424.65s user  449.74s total
 ```
 
 **434 s of wall clock for a 420 s mission.** CLAUDE.md documents this run as ~25 s — that

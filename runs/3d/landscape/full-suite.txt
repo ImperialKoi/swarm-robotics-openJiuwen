@@ -1,0 +1,62 @@
+uv run ruff check swarmmind tests scripts
+All checks passed!
+uv run pytest
+.............................................................F.......... [ 13%]
+........................................................................ [ 26%]
+........................................................................ [ 39%]
+........................................................................ [ 52%]
+........................................................................ [ 65%]
+........................................................................ [ 79%]
+........................................................................ [ 92%]
+..........................................                               [100%]
+=================================== FAILURES ===================================
+___________________ test_native_burial_state_and_visibility ____________________
+
+tmp_path = PosixPath('/private/var/folders/t1/gprrs4355t5dd91zslcdl6mr0000gn/T/pytest-of-daniel/pytest-94/test_native_burial_state_and_v0')
+
+    def test_native_burial_state_and_visibility(tmp_path):
+        native = shutil.which("godot") or "/Applications/Godot.app/Contents/MacOS/Godot"
+        if not Path(native).is_file():
+            pytest.skip("Native Godot unavailable; source geometry and rescue chain tested separately")
+        root = Path(__file__).resolve().parents[1]
+>       result = subprocess.run(
+            [native, "--headless", "--path", str(root / "godot"),
+             "--log-file", str(tmp_path / "godot.log"), "--script", "res://tests/burial_check.gd"],
+            text=True, capture_output=True, timeout=30,
+        )
+
+tests/test_burial.py:75: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.12.14-macos-aarch64-none/lib/python3.12/subprocess.py:550: in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.12.14-macos-aarch64-none/lib/python3.12/subprocess.py:1209: in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.12.14-macos-aarch64-none/lib/python3.12/subprocess.py:2116: in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: -9 args: ['/Applications/Godot.app/Contents/MacOS/Godot'...>
+endtime = 521811.431069875, orig_timeout = 30
+stdout_seq = [b'Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n', b'\n']
+stderr_seq = [b'ERROR: Condition "ret != noErr" is true. Returning: ""\n   at: get_system_ca_certificates (platform/macos/os_macos....26)\n          GDScript backtrace (most recent call first):\n              [0] run (res://tests/burial_check.gd:26)\n']
+skip_check_and_raise = False
+
+    def _check_timeout(self, endtime, orig_timeout, stdout_seq, stderr_seq,
+                       skip_check_and_raise=False):
+        """Convenience for checking if a timeout has expired."""
+        if endtime is None:
+            return
+        if skip_check_and_raise or _time() > endtime:
+>           raise TimeoutExpired(
+                    self.args, orig_timeout,
+                    output=b''.join(stdout_seq) if stdout_seq else None,
+                    stderr=b''.join(stderr_seq) if stderr_seq else None)
+E           subprocess.TimeoutExpired: Command '['/Applications/Godot.app/Contents/MacOS/Godot', '--headless', '--path', '/Users/daniel/Documents/swarm-robotics-rl/godot', '--log-file', '/private/var/folders/t1/gprrs4355t5dd91zslcdl6mr0000gn/T/pytest-of-daniel/pytest-94/test_native_burial_state_and_v0/godot.log', '--script', 'res://tests/burial_check.gd']' timed out after 30 seconds
+
+../../.local/share/uv/python/cpython-3.12.14-macos-aarch64-none/lib/python3.12/subprocess.py:1253: TimeoutExpired
+=========================== short test summary info ============================
+FAILED tests/test_burial.py::test_native_burial_state_and_visibility - subpro...
+1 failed, 545 passed in 580.34s (0:09:40)
+make: *** [test] Error 1

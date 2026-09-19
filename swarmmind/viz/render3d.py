@@ -13,6 +13,7 @@ import numpy as np
 
 from ..sim.robot import CHASSIS, LANES
 from ..viz.render import LANE_COLOR
+from .burial import BURIED_LIFT, SURFACE_LIFT, body_arrays, needs_excavation, rubble_parts
 from .prop_stream import TILE_METRES, tile_primitives
 from .prop_stream import TRIANGLES as PROP_TRIANGLES
 from .terrain_surface import TerrainSurface
@@ -74,7 +75,8 @@ class Camera3D:
 
 
 def raster_triangles(img, zbuf, cam: Camera3D, vertices, triangles, color,
-                     *, atmosphere: bool = False, shaded: bool = True) -> None:
+                     *, atmosphere: bool = False, shaded: bool = True,
+                     two_sided: bool = False) -> None:
     """Small flat-shaded, perspective-correct mesh pass for close unit inspection.
 
     Bounding boxes are clipped before rasterisation. Subpixel and offscreen faces
@@ -108,7 +110,7 @@ def raster_triangles(img, zbuf, cam: Camera3D, vertices, triangles, color,
         colors = colors * (1 - fogf[:, None]) + FOG_COLOR * fogf[:, None]
     # Back-face culling also catches winding errors in generated/exported geometry.
     visible = ((norm > 1e-10) & (depth[triangles].min(axis=1) > .05)
-               & (np.sum(normals * (cam.pos - points.mean(axis=1)), axis=1) > 0))
+               & (two_sided | (np.sum(normals * (cam.pos - points.mean(axis=1)), axis=1) > 0)))
     for k in np.flatnonzero(visible):
         tri = triangles[k]
         p = screen[tri]
@@ -295,8 +297,7 @@ class Renderer3D:
 
     def pov(self, world, i: int, eye: float = 1.1, look_ahead: float = 14.0) -> Camera3D:
         """What robot ``i`` is looking at. Eye height sits above its own chassis."""
-        _, origin = self.surface.robot_pose(*world.pos[i], float(world.theta[i]),
-                                             int(world.chassis[i]))
+        _, origin = self.unit_pose(world, i)
         ground = origin[2]
         th = float(world.theta[i])
         pos = np.array([world.pos[i, 0], world.pos[i, 1], ground + eye], dtype=np.float32)
@@ -336,8 +337,7 @@ class Renderer3D:
         ``dist`` the wheel, and ``anchor_off`` the right-drag that slides the unit
         around inside the frame.
         """
-        _, origin = self.surface.robot_pose(*world.pos[i], float(world.theta[i]),
-                                             int(world.chassis[i]))
+        _, origin = self.unit_pose(world, i)
         ground = origin[2]
         anchor = np.array([world.pos[i, 0], world.pos[i, 1],
                            ground + self.CHASE_ANCHOR_Z], dtype=np.float32)
@@ -370,12 +370,30 @@ class Renderer3D:
 
     def render(self, world, cam: Camera3D, *, fog: bool = True,
                robots: bool = True, hide: int | None = None,
-               sectors: bool = False, fx=None, activity=None) -> np.ndarray:
+               sectors: bool = False, fx=None, activity=None,
+               victims: bool = False, thermal_unit: int | None = None) -> np.ndarray:
         img = self._sky()
         zbuf = np.full((self.h, self.w), np.inf, dtype=np.float32)
 
         self._ground_fill(img, zbuf, cam)
         self._draw_terrain(img, zbuf, world, cam, fog, sectors)
+
+        if victims and thermal_unit is None:  # explicit ground-truth view (V/G)
+            for victim in world.victims:
+                if victim.state >= 3 or np.linalg.norm(victim.pos-cam.pos[:2]) > 90:
+                    continue
+                x, y = victim.pos
+                yaw = (x*1.7+y*3.1) % (2*np.pi)
+                rotation, origin = self.surface.robot_pose(x, y, yaw, stride=self._stride_at(x, y))
+                buried = needs_excavation(victim.state, victim.buried)
+                vertices, triangles, colors = body_arrays()
+                body = vertices @ rotation.T + origin + rotation[:, 2]*(BURIED_LIFT if buried else SURFACE_LIFT)
+                raster_triangles(img, zbuf, cam, body, triangles, colors,
+                                 atmosphere=True, shaded=False, two_sided=True)
+                if buried:
+                    for part in rubble_parts():
+                        raster_triangles(img, zbuf, cam, part.vertices @ rotation.T+origin,
+                                         part.triangles, np.asarray(part.color)*255, atmosphere=True)
 
         if robots:
             # Distant units keep the cheap legible markers. Close units share the
@@ -391,9 +409,7 @@ class Renderer3D:
                 model = build_model(LANES[lane], CHASSIS[chassis])
                 state = animation_state(lane, chassis, int(activity[i]) if activity is not None
                                         else 0, int(world.status[i]), world.pos[i], world.digging)
-                heading, offset = self.surface.robot_pose(*world.pos[i], float(world.theta[i]),
-                                                          int(world.chassis[i]),
-                                                          self._stride_at(*world.pos[i]))
+                heading, offset = self.unit_pose(world, i, self._stride_at(*world.pos[i]))
                 for part, vertices in posed_parts(model, time=float(world.t), state=state):
                     colour = np.asarray(part.color) * 255
                     if world.status[i] == 1:
@@ -412,7 +428,17 @@ class Renderer3D:
         if fx is not None and len(fx):
             pp, pc, pa, ps = fx.points()
             self._splat(img, zbuf, cam, pp, pc, scale=ps, alpha=pa, write_depth=False)
+        if thermal_unit is not None:
+            from .thermal import draw_sources, screen_pass
+
+            draw_sources(self, world, cam, img, zbuf, thermal_unit)
+            img = screen_pass(img, world.t)
         return np.clip(img, 0, 255).astype(np.uint8)
+
+    def unit_pose(self, world, i: int, stride=1):
+        return self.surface.robot_pose(*world.pos[i], float(world.theta[i]),
+                                       int(world.chassis[i]), stride,
+                                       airborne=bool(world.airborne[i] and world.status[i] < 2))
 
     def _robot_points(self, world, hide: int | None, exclude=None):
         alive = world.status <= 1
@@ -424,6 +450,9 @@ class Renderer3D:
         if len(idx) == 0:
             return np.zeros((0, 3), np.float32), np.zeros((0, 3), np.float32)
         ground = np.array([self._render_height(*world.pos[i]) for i in idx])
+        flying = world.airborne[idx] & (world.chassis[idx] == 3)
+        if flying.any():
+            ground[flying] = self.surface.flight_height_at_world(*world.pos[idx[flying]].T)
         pts, cols = [], []
         for dz in (0.3, 0.6, 0.9, 1.2, 1.5):
             pts.append(np.stack([world.pos[idx, 0], world.pos[idx, 1], ground + dz], axis=1))

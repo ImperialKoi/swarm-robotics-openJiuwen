@@ -139,8 +139,11 @@ The robots now have distinct 3D tools and animated chassis: camera scouts, bucke
 stretcher carriers and mast relays, in 15 valid combinations. See the
 [animated fleet gallery](units/index.html) and [model notes](UNIT_MODELS.md).
 Wheels and legs follow measured travel; digging requires an active excavation; the
-carrier's rescue load appears only while carrying. Rotor blades animate at ground
-height because airborne state is absent from the dashboard telemetry.
+carrier's rescue load appears only while carrying. Rotor scouts, diggers and relays
+fly above the ground fleet and cross rubble, walls and water. They climb ahead of hills
+and mountains, and land on safe dry ground to inspect or work. Follow cameras and click
+selection track their airborne position. Flight uses actual simulator telemetry;
+recordings from before this field was added show grounded rotors.
 
 Offscreen units and terrain chunks are culled and unloaded after a short reuse grace.
 Orbit simplifies distant geometry; first-person and chase keep every visible terrain
@@ -162,6 +165,7 @@ view that answers *"is it always the wheeled ones getting stuck?"*.
 | 🔴 red | **wheeled** | ≤ 0.40 | none | fastest (1.18×) |
 | 🟡 yellow | **tracked** | ≤ 0.58 | fords 0.45 m | 1.00× |
 | 🔷 cyan | **legged** | ≤ 1.60 | fords 1.20 m | slowest (0.80×) |
+| pink | **rotor** | clears terrain in flight | flies over water; lands dry | 2.00× its rating in flight |
 
 Chassis is mixed evenly *within* every job, on purpose: a casualty on the far bank of a
 river needs a carrier that can cross it, which only matters if carriers differ among
@@ -214,6 +218,7 @@ catching a bad plan.
 | `C` | colour robots by **chassis** instead of job |
 | `S` | hivemind sector tint on/off |
 | `P` | particle effects on/off |
+| `H` | switch normal / simulated thermal vision for the followed unit; from orbit, enter POV |
 | `F` | cycle the view of the followed robot: **POV** → **chase** → back to the orbit. One press is first-person from the robot's own eye; two is the close third-person follow camera |
 | click | follow a robot. The foot of the view names its job, chassis, battery and activity |
 | `Esc` | stop following |
@@ -237,6 +242,26 @@ framing, kept separate from the orbit's so that pressing `F` never loses the wid
 
 Pressing `F` with nothing followed picks the first robot, and clicking another robot
 while in chase snaps straight to it rather than flying across the map.
+
+### Thermal vision
+
+Select a unit and press **H**. Exposed casualties glow amber; buried casualties leave
+a dim, mottled reddish signature on their rubble cover. After excavation the exposed
+body becomes warmer. Position-dependent variation and a small shimmer/noise pattern
+replay deterministically with simulation time. Press **H** again for normal vision.
+The clickable **thermal vision** row does the same thing. `F` retains thermal mode in
+chase; orbit suspends it (`READY`) until you return to a unit view.
+
+This is **simulated thermal imagery for the operator**, with relative intensity, not
+measured body temperatures or an additional autonomous detector. It uses the existing
+dashboard truth feed to render heat surfaces inside the selected unit's 90° / 26 m
+cone, checks walls, and depth-tests against the 3D scene. Rubble warmth is a stylised
+surface signature, not a claim that infrared sees through walls. Carried/rescued
+casualties do not leave a heat source at their old position. The HUD labels the mode;
+the robots' existing perception and rescue decisions remain unchanged.
+
+Offline comparison: `uv run python scripts/preview_thermal.py` writes normal,
+exposed-thermal, and buried-thermal frames to `runs/3d/thermal/`.
 
 ### The contact overlay
 
@@ -273,7 +298,7 @@ A healthy mission looks like this:
    being re-awarded to somebody else within three seconds. That is the self-healing
    claim, visible.
 
-**Known problem in the measured build:** the swarm does not spread out properly. The median robot
+**Known problem:** the swarm does not spread out properly. The median robot
 ends a seven-minute mission only ~43 m from base on a map whose diagonal is 577 m, so
 most of the map is never searched and only ~7% of casualties are rescued. It is not
 crowding — a 48-robot swarm stops at the same distance — and it is not the auction,

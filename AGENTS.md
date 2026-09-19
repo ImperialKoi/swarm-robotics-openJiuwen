@@ -95,7 +95,7 @@ Godot 4 (native macOS) ──WebSocket 10Hz── bridge_node
 
 ### Scaling rules (robot count is measured, not chosen)
 
-`N` is **512** (128 per lane). The measured ceiling under the placeholder controller was 3072 (docs/MEASUREMENTS.md M-1), but compute was never the binding constraint - mission size is, and the two must scale together. Re-measure with the full controller and auction, which are far heavier than the placeholder.
+`N` is **512** (128 per lane). The measured ceiling under the D1 placeholder controller was 3072 (docs/MEASUREMENTS.md M-1), but compute was never the binding constraint - mission size is, and the two must scale together. Re-measure after D2 and D3, which are far heavier than the D1 controller.
 
 **Robot count and mission size are coupled.** A large swarm on a small map clears all fog in seconds, leaves the auction nothing to allocate, and makes the scripted failure invisible. If you change `robots_per_lane`, you are also changing `map.*`, `victims.count` and `hazard.growth_rate`. Four rules keep the scaling honest:
 
@@ -104,21 +104,21 @@ Godot 4 (native macOS) ──WebSocket 10Hz── bridge_node
 - **The announcement cap must scale with free robots**, not be a flat number. A fixed cap of 24 throttled a 512-robot swarm to 24 new assignments per second and left the rest idle.
 - **Orphaning re-offers work without taking it away** from a live robot. Releasing an out-of-contact relay frees it to bid on a frontier, it abandons its post, and the swarm behind it loses contact - a cascade that ended one run with 0 of 16 robots in comms.
 - **Fog/LOS runs at 5 Hz** with a half-cell movement gate, vectorized over a disc template. Not per-cell Bresenham at 20 Hz.
-- **Distance fields cost 22.4 ms each on the demo grid** (MEASUREMENTS.md M-4). One field per open task per cycle is ~4.5 s of compute per second at 200+ tasks. The auction must use a 4x-downsampled navigation grid, cap announced tasks at ~24 per cycle, and amortise field computation across the cycle's 20 ticks. All three, not one.
+- **Distance fields cost 22.4 ms each on the demo grid** (MEASUREMENTS.md M-4). One field per open task per cycle is ~4.5 s of compute per second at 200+ tasks. D3 must use a 4x-downsampled navigation grid, cap announced tasks at ~24 per cycle, and amortise field computation across the cycle's 20 ticks. All three, not one.
 
 ---
 
 ## Working rules
 
 - **Measure before tuning `N`.** The stress sweep sets the *upper bound*; the shipped number is also capped by dashboard readability. Above ~48 markers Godot switches to `MultiMeshInstance2D`.
-- **`make check` stays green.** A commit that breaks the headless mission gets reverted, not debugged later.
+- **`make check` stays green from D3 onward.** A commit that breaks the headless mission gets reverted, not debugged later.
 - **Build the classical heuristic first, always.** `control/heuristic.py` is both the fallback and the gate's baseline. Anything learned must beat it on the demo maps ([TECHNICAL.md §8](docs/TECHNICAL.md)) or it does not ship. A heuristic winning is a **result**, not a failure.
 - **Bound the action before training it.** Measure what a perfect or classical version of the action buys first (`training/rl/bound.py`). Contact inspection was dropped this way: an oracle choosing only real casualties moved rescues +0.5 ([MEASUREMENTS.md M-76](docs/MEASUREMENTS.md)).
 - **Everything trained is reached by a ladder, never a jump.** Hivemind: RAFT → DPO → GRPO, each banked before attempting the next. Never leave the repo in a state where the only tuned model is one that hasn't finished training.
 - **Checkpoint Kaggle work from the first run.** `/kaggle/working` is not ambiently persistent — resume works by attaching the previous saved version's output as an input.
 - Prefer **interpretable parameter vectors over neural nets** where they do the job (see the Tier-2 `BehaviorParams` genome). Faster to evolve, impossible to produce uninspectable garbage, and legible on the dashboard.
 - Scenario constants live in `assets/scenarios/*.yaml`, never hardcoded in nodes. **`demo.yaml` is the demo; `test.yaml` is a deliberately tiny fixture so `make check` stays seconds.** Tests run against `test.yaml`, plus one cheap construct-and-assert test against `demo.yaml` so config regressions cannot reach demo day.
-- **Record measurements in `docs/MEASUREMENTS.md`, never delete a row.** The trend across runs is what shows whether a change regressed.
+- **Record measurements in `docs/MEASUREMENTS.md`, never delete a row.** The trend across days is what shows whether a change regressed.
 - New `/swarm/events` kinds need a dashboard handler in the same change, or they are invisible.
 
 ## Do not
@@ -150,13 +150,13 @@ Accuracy matters more than impressiveness here — a judge who catches an overst
 | a unit policy trained with PPO on the four demo maps (only if it cleared the gate) | an RL-trained swarm / learned behaviour that generalises |
 | exact routing to collection points, a correctness fix | a learned or trained navigation |
 
-`SHIPPING.md` (generated by `training/gate.py`) is the source of truth for which components are trained vs. heuristic. Keep it accurate.
+`SHIPPING.md` (generated by `training/gate.py` on D12) is the source of truth for which components are trained vs. heuristic. Keep it accurate.
 
 ---
 
 ## LLM usage in this repo
 
-- **CV detector:** small conv net over 48x48x3 egocentric frames, trained on Kaggle GPU against simulator labels. Must beat `perception/classical.py` at the gate or the classical detector ships. Perception is real either way.
+- **CV detector (D11):** small conv net over 48x48x3 egocentric frames, trained on Kaggle GPU against simulator labels. Must beat `perception/classical.py` at the gate or the classical detector ships. Perception is real either way.
 - **Hivemind (primary):** locally-served `Qwen2.5-1.5B-Instruct` GGUF via `llama-server` with JSON-schema-constrained decoding. Fine-tuned on this simulator.
 - **Hivemind (API rung):** Anthropic SDK, model `claude-opus-5`, `output_config={"effort":"low","format":{...}}` for structured output, `thinking={"type":"adaptive"}`. **Assistant prefill returns 400 on Opus 5** — use structured outputs to constrain the JSON, never prefill. ~$0.60 per 7-minute run. **There is no API key on this machine, so this rung has never run** — `build_ladder` drops it silently and the code is unverified against the live API. Do not describe it as working.
 - **The schema is the latency budget.** Generation dominates the 6 s cycle. Unconstrained, the 1.5B model took 10.6 s per call and every cycle fell through to the scripted rung while appearing to work. `maxLength` in `DIRECTIVE_SCHEMA` compiles to a GBNF constraint; loosening it is a latency change first ([MEASUREMENTS.md M-27](docs/MEASUREMENTS.md)).
@@ -181,7 +181,7 @@ Accuracy matters more than impressiveness here — a judge who catches an overst
 | **What every training run did, and why it failed** | [training_notes/SUMMARY.md](training_notes/SUMMARY.md) — read before re-running anything |
 | **Every problem hit so far, and what fixed it** | [docs/FIXES.md](docs/FIXES.md) — grouped by subsystem; read before re-fixing something |
 | Why the rescue rate is ~11%, measured live | `uv run python scripts/diagnose.py` · [MEASUREMENTS.md M-34/35/36](docs/MEASUREMENTS.md) |
-| Demo running order | [docs/RUNBOOK.md](docs/RUNBOOK.md) |
+| Demo running order | [docs/RUNBOOK.md](docs/RUNBOOK.md) (written D13) |
 | Unit policy (per-robot staging inside Tier 2) | [swarmmind/control/unit_policy.py](swarmmind/control/unit_policy.py) · [TECHNICAL.md §7a](docs/TECHNICAL.md) · [training_notes/run4-unit-policy.md](training_notes/run4-unit-policy.md) |
 | Unit-policy training (BC -> PPO, numpy), bound, Kaggle notebook | [swarmmind/training/rl/](swarmmind/training/rl/) · [swarmmind/training/notebooks/unit_policy.ipynb](swarmmind/training/notebooks/unit_policy.ipynb) |
 | Routing to collection points (carrier trap fix; kept, **off by default**) | [swarmmind/control/zone_routing.py](swarmmind/control/zone_routing.py) · [MEASUREMENTS.md M-76, M-76e, M-76f](docs/MEASUREMENTS.md) |

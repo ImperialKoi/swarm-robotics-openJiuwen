@@ -83,7 +83,7 @@ def test_victims_respect_min_separation(world, scn):
 
 def test_robots_never_penetrate_walls(scn):
     """Tier 1 is the safety floor (CLAUDE.md #2), but the collision response in World
-    must hold even under the wander controller, which has no avoidance at all."""
+    must hold even under the D1 wander controller, which has no avoidance at all."""
     w = World(scn, 7)
     rng = w.rng["noise"]
     for _ in range(int(60 * scn.rates.tick_hz)):

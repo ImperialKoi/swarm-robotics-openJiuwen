@@ -1,7 +1,7 @@
 # POSSIBLE BUG 2 — the swarm grinds to a halt, and the flow field is why
 
 **Status: diagnosed, not fixed. No code was changed.**
-Investigated against `demo`, seed 42, `hivemind=False`.
+Investigated (D13) against `demo`, seed 42, `hivemind=False`.
 
 Symptom as reported: *near the end nearly all of the robots don't move any more, and as
 the run progresses the exploration rate gets slower and slower.*

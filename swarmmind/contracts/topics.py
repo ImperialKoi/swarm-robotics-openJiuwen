@@ -1,4 +1,4 @@
-"""Topic names. FROZEN.
+"""Topic names. FROZEN at D7.
 
 These are the exact names from the MVP spec's node graph. They are identical whether
 the active transport is LocalBus (in-process) or Ros2Bus (rclpy) -- that is what makes

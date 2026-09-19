@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""Robot-count sweep -- the measurement that sets N.
+"""Robot-count sweep -- D2 deliverable, and the thing that sets N.
 
 Method (MVP spec section 2): find the largest N whose DemoSim real-time factor holds at
-or above 0.8x, then ship floor(0.8 * ceiling). Re-run with Godot and llama-server
+or above 0.8x, then ship floor(0.8 * ceiling). Re-run on D7 with Godot and llama-server
 resident; the ceiling under real memory pressure is the one that matters on 8 GB.
 
     uv run python scripts/stress.py
@@ -107,8 +107,8 @@ def main() -> int:
         print(f"\nceiling (RTF >= {RTF_FLOOR}): {ceiling} robots")
         print(f"ship 80% of it: robots_per_lane = {max(1, ship // 4)}  ({(ship // 4) * 4} total)")
         print("Cap this by dashboard readability too -- above ~48 markers Godot needs MultiMesh.")
-        print("\nNOTE: valid only for the controller and scenario swept. Re-run with the\n"
-              "full auction and again with Godot and llama-server\n"
+        print("\nNOTE: valid only for the controller and scenario swept. Re-run after D3\n"
+              "(auction distance fields) and again on D7 with Godot and llama-server\n"
               "resident -- the ceiling under real memory pressure is the one that matters.")
     else:
         print("\nno tested count held 0.8x RTF; profile the tick before reducing N")

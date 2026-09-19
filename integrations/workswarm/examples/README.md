@@ -2,7 +2,43 @@
 
 These files are recordings, not live inference or canned responses used by the app.
 
-## Final-build fixture
+The three original examples below use the **earlier SwarmFlow integration**. They do
+not demonstrate the native Leader/Teammate migration. Native records are identified separately.
+
+## Final native Leader/Teammate demo-map smoke
+
+[`native-demo-smoke.md`](native-demo-smoke.md), from
+[`native-demo-smoke.jsonl`](native-demo-smoke.jsonl), records the final native SDK
+runtime and JSON-schema model adapter with real local Qwen inference, 512 robots,
+seed 42, through t=65. Three four-call episodes applied orders for B1, B4 and A6.
+In the third, logistics changed the leader's D5 proposal to A6; safety approved it,
+the leader accepted it and the simulator applied it. Episode times were 12.429,
+12.704 and 17.064 seconds (1,781 / 1,790 / 1,748 tokens), within the 20-second limit.
+A fourth episode was cancelled when the mission ended. There were no safety vetoes
+in this recording; the integration suite verifies that branch with test responses.
+
+The 65 sim-seconds took 91.90 wall-seconds (**0.71× realtime**) on the loaded laptop.
+This verifies native coordination and simulator application, not smooth presentation
+performance, a full 420-second rehearsal, or rescue uplift. The earlier fixture below
+verifies an operator stop and lease expiry; the final map run ended normally.
+
+## Earlier native Leader/Teammate verification
+
+[`native-fixture.md`](native-fixture.md), from [`native-fixture.jsonl`](native-fixture.jsonl),
+records the actual native `TeamAgent` runtime, local Qwen model and simulator on
+`test.yaml`, seed 42, through t=80. Two orders were created by the leader, completed by
+logistics, passed by the native safety reviewer, submitted by the leader and applied by
+the simulator. Native episodes took 12.553 s / 2,428 tokens and 16.639 s / 2,502 tokens.
+The operator stopped the third episode; the autonomous mission continued at 1.00×
+realtime and both accepted orders expired. This is fixture verification, not a rescue
+performance comparison. No peer revision or safety veto occurred in this live recording;
+the native integration tests verify those branches with deterministic model responses.
+
+[`native-sdk-check.md`](native-sdk-check.md) records a separate real-local-model call
+on a recorded observation snapshot. It completed four calls in 14.702 s / 2,425 tokens
+under default limits. No simulator dispatch happened in that standalone SDK check.
+
+## Earlier SwarmFlow fixture
 
 [`final-fixture.md`](final-fixture.md), from [`final-fixture.jsonl`](final-fixture.jsonl),
 records the final code running the real WorkSwarm/local-model pipeline on `test.yaml`:

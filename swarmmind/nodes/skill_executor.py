@@ -1,7 +1,7 @@
 """Tier 2 execution: carrying out an assigned task.
 
 Contains **no allocation logic**. Which robot gets which task is the auction's job
-(``nodes/auction.py``); this module only turns an assignment into a navigation goal,
+(D3, nodes/auction.py); this module only turns an assignment into a navigation goal,
 detects completion, and writes the ``last_action_reason`` string that feeds the
 dashboard's follow-cam panel and the Tier-2 ticker.
 
@@ -18,7 +18,7 @@ from ..contracts.schemas import ACTIVITY
 from ..control.planner import UNREACHABLE
 from ..sim import grid
 from ..sim.robot import LANE_INDEX, OUT_OF_COMMS
-from ..sim.world import CARRIED, CLEARED, FOUND, HIDDEN, RESCUED
+from ..sim.world import CARRIED, CLEARED, FOUND, HIDDEN, REACH_DIG, RESCUED
 
 #: A sector this well explored stops attracting idle robots. Not 1.0: the last few
 #: percent of a sector are usually cells no chassis can stand in, so a swarm told to
@@ -177,7 +177,7 @@ class SkillExecutor:
 
     def free_mask(self, world) -> np.ndarray:
         alive = world.status <= OUT_OF_COMMS
-        return alive & np.array([a is None for a in self.assignment])
+        return alive & (world.carrying < 0) & np.array([a is None for a in self.assignment])
 
     def set_policy_goal(self, i: int, goal: tuple[float, float], why: str,
                         expires_at: float) -> None:
@@ -375,20 +375,19 @@ class SkillExecutor:
         caller does that at the auction rate.
         """
         done: list[str] = []
-        touch = self._candidates(world, arrive_radius) if not full else range(world.n)
+        touch = self._candidates(world, arrive_radius, nav) if not full else range(world.n)
         # Tier 1 stops the robot within arrive_radius of a goal that has been snapped to
         # the cell grid, so completion must tolerate that snap. Requiring the tighter
         # radius here deadlocks: the robot parks in the gap, stops moving, and holds the
         # task forever.
         reach = arrive_radius + world.cell
         for i in touch:
-            a = self.assignment[i]
-            if a is None:
-                continue
-            self._adopt_carried(world, int(i), a)
             if world.status[i] > OUT_OF_COMMS:
                 # Dead robots keep their assignment until the auction times them out;
                 # self-healing is the auction's story to tell, not ours.
+                continue
+            a = self._adopt_carried(world, int(i), self.assignment[i])
+            if a is None:
                 continue
             if full and self._stalled(world, nav, i, a):
                 self.release(i, f"{_lane_of(world, i)} abandoned stalled {a.kind}")
@@ -403,8 +402,8 @@ class SkillExecutor:
                 self._narrate(world, i, a)
         return done
 
-    def _adopt_carried(self, world, i: int, a: Assignment) -> None:
-        """A robot holding a casualty is doing an extraction, whatever it was told to do.
+    def _adopt_carried(self, world, i: int, a: Assignment | None) -> Assignment | None:
+        """Deliver the casualty actually held, after any immediate hazard retreat.
 
         Pickup is proximity-based in the world -- a gripper standing next to a cleared
         casualty picks them up, which is the right behaviour. But the *task* did not
@@ -412,23 +411,31 @@ class SkillExecutor:
         carry them to the contact and onward forever, never to an extraction zone.
         """
         held = int(world.carrying[i])
-        if held < 0 or a.kind == "extract":
-            return
+        if held < 0 or (a is not None and (
+                a.kind == "retreat" or (a.kind == "extract" and a.victim == held))):
+            return a
+        if a is None:
+            a = Assignment(f"extract_pickup_{world.robot_ids[i]}_{held}", "extract",
+                           tuple(world.pos[i]), assigned_at=world.t)
+        # An extract assignment may name a different casualty picked up in passing.
+        # Retaining it sends a loaded carrier to work it cannot collect.
         a.kind = "extract"
         a.victim = held
-        a.progress_at = world.t
-        a.last_dist = float("inf")
-        self._dirty = True
-        self.reason[i] = (f"{_lane_of(world, i)} picked up {world.victims[held].id} "
-                          f"in passing, diverting to extraction")
+        a.target = tuple(world.pos[i])
+        a.report = None
+        self.assign(world, i, a,
+                    why=f"{_lane_of(world, i)} picked up {world.victims[held].id} "
+                        "in passing, diverting to extraction")
+        return a
 
-    def _candidates(self, world, arrive_radius: float) -> np.ndarray:
+    def _candidates(self, world, arrive_radius: float, nav=None) -> np.ndarray:
         """Robots worth inspecting this tick: those at their goal, plus anyone whose
         victim changed state. Vectorised; typically a handful of indices."""
-        goal_xy, goal_id = self.goals(world)
+        goal_xy, goal_id = self.goals(world, nav)
+        carrying = np.flatnonzero(world.carrying >= 0).astype(np.int32)
         has = goal_id >= 0
         if not has.any():
-            return np.empty(0, dtype=np.int32)
+            return carrying
         g = np.array(goal_xy, dtype=np.float64)
         idx = np.nonzero(has)[0]
         d = np.linalg.norm(world.pos[idx] - g[goal_id[idx]], axis=1)
@@ -437,10 +444,8 @@ class SkillExecutor:
         vic = [i for i, a in enumerate(self.assignment)
                if a is not None and a.victim is not None
                and world.victims[a.victim].state in (CLEARED, CARRIED, RESCUED)]
-        carrying = np.nonzero((world.carrying >= 0)
-                              & np.array([a is not None for a in self.assignment]))[0]
         return np.unique(np.concatenate(
-            [arrived, np.array(vic, dtype=np.int32), carrying.astype(np.int32)]))
+            [arrived, np.array(vic, dtype=np.int32), carrying]))
 
     def _stalled(self, world, nav, i: int, a: Assignment) -> bool:
         """True if the robot has not closed on its goal for too long.
@@ -458,7 +463,10 @@ class SkillExecutor:
         working = (
             (a.kind == "extract" and world.carrying[i] == a.victim)
             or (a.kind == "clear_debris" and a.victim is not None
-                and 0.0 < world.victims[a.victim].debris_remaining < 1.0)
+                and not world.airborne[i]
+                and world.victims[a.victim].state == FOUND
+                and world.victims[a.victim].debris_remaining > 0.0
+                and _dist(world.pos[i], world.victims[a.victim].pos) <= REACH_DIG)
         )
         if working:
             a.progress_at = world.t

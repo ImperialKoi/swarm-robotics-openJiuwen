@@ -20,7 +20,7 @@ class Scorecard:
     victims_total: int
     #: Fraction of **passable ground** the swarm has observed -- not a count of sectors.
     #:
-    #: Previously named `sectors_explored_frac`, which read as "46.9% of sectors" when the
+    #: Named `sectors_explored_frac` until D12, which read as "46.9% of sectors" when the
     #: same run had touched 77% of them and finished 29%. The value was always ground
     #: coverage and was always honest; the name invited a reading it does not support,
     #: and `training/gate.py` scores on it, so a reader had every reason to take it at

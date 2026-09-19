@@ -5,9 +5,9 @@ never seen, or the classical one ships. That is not a formality: a heuristic win
 **result**, and `SHIPPING.md` is written from whatever actually happened rather than from
 what was hoped for.
 
-The **classical baseline** and held-out seeds need no trained artefact.
-The comparison arms (evolved roster, CV detector, tuned hivemind)
-are evaluated as each becomes available.
+D9 fills in the half that does not need any trained artefact: the **classical baseline**
+and the held-out seeds. The comparison arms (evolved roster, CV detector, tuned hivemind)
+land at D10-D12 as each becomes available.
 """
 
 from __future__ import annotations
@@ -132,7 +132,7 @@ def classical_baseline(scenario: str = "test",
     `genes=None` matters here, and so does `evolved=False`. An all-0.5 genome is *not*
     the classical policy -- the gene-driven bid carries four terms the classical bid does
     not have at all -- so comparing against a midpoint genome would flatter every result.
-    Previously this arm still built its robots from `demo_roster.yaml`, because
+    And until D12 this arm still built its robots from `demo_roster.yaml`, because
     `World` loaded it unconditionally: the "classical baseline" ran **evolved bodies**
     with a classical bid, and the comparison measured something other than what it said.
     """

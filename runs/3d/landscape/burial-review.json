@@ -1,0 +1,13 @@
+{
+  "scenario": "demo",
+  "buried_casualties": 44,
+  "total_casualties": 110,
+  "mesh_triangles": 216,
+  "all_piles_triangles": 9504,
+  "source": "swarmmind/viz/burial.py",
+  "preview_scenario": "test",
+  "preview_seed": 42,
+  "preview_simulation_ticks": 0,
+  "cleared_preview": "isolated copy set to CLEARED, not an elapsed mission",
+  "native_visual_capture": "blocked by automatic approval review service quota; offline frames inspected and headless marker/state checks passed"
+}

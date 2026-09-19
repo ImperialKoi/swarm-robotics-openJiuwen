@@ -1,0 +1,31 @@
+{"event": "started", "input_kind": "RECORDED OBSERVATION FIXTURE", "runtime": "native WorkSwarm Leader/Teammate", "scope": "Real local Qwen model and default budgets. No simulator dispatch in this standalone SDK check."}
+{"event": "native_team", "implementation": "openjiuwen.agent_teams.TeamAgent", "leader": "lead", "teammates": ["logistics", "safety"], "dispatch": "scheduled"}
+{"event": "native_model", "role": "lead", "call": 1, "tools": ["dispatch_plan"]}
+{"event": "model", "role": "lead", "model": "qwen2.5-1.5b-instruct", "tokens": 637, "usage_reported": true, "native": true}
+{"event": "native_tool", "role": "lead", "tool": "dispatch_plan", "arguments": "{\"note\": \"Search the disaster zone, prioritize the\",\"choice\": 0}"}
+{"event": "decomposed", "role": "lead", "native_task": "rescue-plan", "tasks": ["logistics assessment", "independent safety verification", "leader acceptance"]}
+{"event": "message", "role": "lead", "choice": 0, "note": "Search the disaster zone, prioritize the"}
+{"event": "native_task", "task": "rescue-plan", "operation": "create_task", "assignee": "logistics", "reviewer": "safety", "directive": {"sector": "A1", "priority": "high", "action": "explore"}}
+{"event": "native_stream", "member": "lead", "stream_type": "answer"}
+{"event": "native_model", "role": "logistics", "call": 2, "tools": ["recommend_plan"]}
+{"event": "model", "role": "logistics", "model": "qwen2.5-1.5b-instruct", "tokens": 823, "usage_reported": true, "native": true}
+{"event": "native_tool", "role": "logistics", "tool": "recommend_plan", "arguments": "{\"note\": \"Search the disaster zone, prioritize the\", \"choice\": 0}"}
+{"event": "tool", "role": "logistics", "tool": "read_capacity", "arguments": {"sector": "A1"}, "result": {"sector": "A1", "in_contact_here": 13, "lanes": {"none": {"connected": 4, "battery": 1.0}, "scoop": {"connected": 4, "battery": 1.0}, "gripper": {"connected": 4, "battery": 1.0}, "antenna": {"connected": 4, "battery": 1.0}}, "route_feasibility": "unknown"}}
+{"event": "tool", "role": "logistics", "tool": "read_rescue_backlog", "arguments": {"sector": "A1"}, "result": {"sector": "A1", "announced_work": {"explore": 16}, "unresolved_contacts": 0, "note": "announcements include backups; not a count of casualties"}}
+{"event": "message", "role": "logistics", "choice": 0, "note": "Search the disaster zone, prioritize the"}
+{"event": "native_task", "task": "rescue-plan", "operation": "member_complete_task", "status": "in_review"}
+{"event": "native_stream", "member": "logistics", "stream_type": "answer"}
+{"event": "native_model", "role": "safety", "call": 3, "tools": ["verify_task"]}
+{"event": "model", "role": "safety", "model": "qwen2.5-1.5b-instruct", "tokens": 548, "usage_reported": true, "native": true}
+{"event": "tool", "role": "safety", "tool": "check_plan", "arguments": {"directive": {"sector": "A1", "priority": "high", "action": "explore"}}, "result": {"ok": true, "issues": [], "evidence": "sector:A1"}}
+{"event": "native_tool", "role": "safety", "tool": "verify_task", "arguments": "{\n\"task_id\": \"rescue-plan\",\n\"decision\": \"pass\",\n\"feedback\": \"The deliverable meets the acceptance and\" }"}
+{"event": "message", "role": "safety", "choice": 0, "note": "The deliverable meets the acceptance and"}
+{"event": "reviewed", "role": "safety", "directive": {"sector": "A1", "priority": "high", "action": "explore"}}
+{"event": "native_task", "task": "rescue-plan", "operation": "verify_task", "reviewer": "safety", "decision": "pass"}
+{"event": "native_stream", "member": "logistics", "stream_type": "answer"}
+{"event": "native_model", "role": "lead", "call": 4, "tools": ["submit_reviewed_plan"]}
+{"event": "model", "role": "lead", "model": "qwen2.5-1.5b-instruct", "tokens": 417, "usage_reported": true, "native": true}
+{"event": "native_tool", "role": "lead", "tool": "submit_reviewed_plan", "arguments": "{\"note\": \"Task completed and safety verified.\", \"choice\": 0}"}
+{"event": "message", "role": "lead", "choice": 0, "note": "Task completed and safety verified."}
+{"event": "native_task", "task": "rescue-plan", "operation": "submit_reviewed_plan", "status": "completed"}
+{"event": "native_metrics", "wall_s": 14.702, "calls": 4, "tokens": 2425, "submitted": true}

@@ -25,6 +25,9 @@ from ..sim import grid
 _DX = np.array([1, 1, 0, -1, -1, -1, 0, 1], dtype=np.int32)
 _DY = np.array([0, 1, 1, 1, 0, -1, -1, -1], dtype=np.int32)
 _DNORM = np.sqrt(_DX.astype(np.float32) ** 2 + _DY.astype(np.float32) ** 2)
+# The field builder orders its edges differently from the steering tie-break order.
+_EDGE_INDEX = np.array([grid.COARSE_DIRS.index((int(dx), int(dy)))
+                        for dx, dy in zip(_DX, _DY, strict=True)])
 
 #: The eight step directions as unit vectors, precomputed.
 #:
@@ -54,7 +57,7 @@ class NavFields:
 
     def __init__(self, passable: np.ndarray, cell: float, factor: int = 4,
                  max_entries: int = 512, threshold: float = 0.5,
-                 edge_aware: bool = True) -> None:
+                 edge_aware: bool = True, edge_steering: bool = False) -> None:
         self.factor = factor
         self.cell = cell
         self.coarse_cell = cell * factor
@@ -64,6 +67,9 @@ class NavFields:
         #: all coarse edges on the demo map (POSSIBLE_BUG2, M-60). Built once per
         #: chassis; `passable` never changes for the mission.
         self.edges = grid.coarse_edge_masks(passable, factor) if edge_aware else None
+        # Experimental: field-consistent steering removes blocked steps, but reduced
+        # rescues on the small scripted fixture. Requires demo-map evaluation (M-84).
+        self.edge_steering = edge_steering
         self.shape = self.coarse.shape
         self._cache: dict[tuple[int, int], np.ndarray] = {}
         #: Steepest-descent direction index per coarse cell, one grid per goal, built
@@ -166,6 +172,9 @@ class NavFields:
         # Cost to *step* there, so diagonals are not preferred purely for being diagonal.
         vals = vals + _DNORM[None, :] * 0.001
         here = field[iy, ix][:, None]
+        if self.edge_steering and self.edges is not None:
+            allowed = self.edges[_EDGE_INDEX[None, :], iy[:, None], ix[:, None]]
+            vals = np.where(allowed, vals, np.float32(np.inf))
         vals = np.where(vals < here, vals, np.float32(np.inf))
         best = np.argmin(vals, axis=1)
         improves = np.isfinite(np.take_along_axis(vals, best[:, None], axis=1)).ravel()
@@ -198,6 +207,11 @@ class NavFields:
         nix = (ix[:, :, None] + _DX).clip(0, w - 1)
         niy = (iy[:, :, None] + _DY).clip(0, h - 1)
         vals = field[niy, nix] + _DNORM * 0.001
+        if self.edge_steering and self.edges is not None:
+            # A neighbouring cell can be closer by a route *around* a wall. Its lower
+            # distance does not make the direct edge to it traversable.
+            allowed = self.edges[_EDGE_INDEX].transpose(1, 2, 0)
+            vals = np.where(allowed, vals, np.float32(np.inf))
         vals = np.where(vals < field[:, :, None], vals, np.float32(np.inf))
         best = np.argmin(vals, axis=-1)
         improves = np.isfinite(np.take_along_axis(vals, best[:, :, None], axis=-1))[:, :, 0]
@@ -229,14 +243,20 @@ class NavSet:
     """
 
     def __init__(self, world, factor: int = 4, threshold: float = 0.5,
-                 edge_aware: bool = True) -> None:
+                 edge_aware: bool = True, edge_steering: bool = False) -> None:
         from ..sim.robot import CHASSIS
 
         self.chassis = CHASSIS
+        # Flight crosses disconnected ground regions. Keep the world's rotor mask
+        # for landing safety; only its route/bid fields use open airspace.
+        airspace = np.ones(world.shape, dtype=bool)
+        airspace[[0, -1], :] = False
+        airspace[:, [0, -1]] = False
         self.nav = [
-            NavFields(world.chassis_passable[i], world.cell, factor, threshold=threshold,
-                      edge_aware=edge_aware)
-            for i in range(len(CHASSIS))
+            NavFields(airspace if chassis == "rotor" else world.chassis_passable[i],
+                      world.cell, factor, threshold=threshold,
+                      edge_aware=edge_aware, edge_steering=edge_steering)
+            for i, chassis in enumerate(CHASSIS)
         ]
         self.factor = factor
         self.coarse_cell = self.nav[0].coarse_cell

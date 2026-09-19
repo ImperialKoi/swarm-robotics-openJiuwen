@@ -1,0 +1,98 @@
+{
+  "42": {
+    "after": {
+      "total": 110,
+      "buried": 44,
+      "covered": 94,
+      "buried_on_rubble": 44,
+      "surface_near_wall": 50,
+      "wet": 0,
+      "blocked_sightlines": 38,
+      "usable_sightlines": 1277
+    },
+    "build_seconds": 0.836,
+    "separation_m": 14.0,
+    "before": {
+      "total": 110,
+      "buried": 44,
+      "covered": 58,
+      "buried_on_rubble": 8,
+      "surface_near_wall": 19,
+      "wet": 3,
+      "blocked_sightlines": 36,
+      "usable_sightlines": 1374
+    }
+  },
+  "43": {
+    "after": {
+      "total": 110,
+      "buried": 44,
+      "covered": 94,
+      "buried_on_rubble": 44,
+      "surface_near_wall": 50,
+      "wet": 0,
+      "blocked_sightlines": 40,
+      "usable_sightlines": 1329
+    },
+    "build_seconds": 1.189,
+    "separation_m": 14.0,
+    "before": {
+      "total": 110,
+      "buried": 44,
+      "covered": 60,
+      "buried_on_rubble": 8,
+      "surface_near_wall": 17,
+      "wet": 7,
+      "blocked_sightlines": 27,
+      "usable_sightlines": 1429
+    }
+  },
+  "44": {
+    "after": {
+      "total": 110,
+      "buried": 44,
+      "covered": 94,
+      "buried_on_rubble": 44,
+      "surface_near_wall": 50,
+      "wet": 0,
+      "blocked_sightlines": 56,
+      "usable_sightlines": 1342
+    },
+    "build_seconds": 0.994,
+    "separation_m": 14.0,
+    "before": {
+      "total": 110,
+      "buried": 44,
+      "covered": 64,
+      "buried_on_rubble": 10,
+      "surface_near_wall": 16,
+      "wet": 8,
+      "blocked_sightlines": 20,
+      "usable_sightlines": 1364
+    }
+  },
+  "45": {
+    "after": {
+      "total": 110,
+      "buried": 44,
+      "covered": 94,
+      "buried_on_rubble": 44,
+      "surface_near_wall": 50,
+      "wet": 0,
+      "blocked_sightlines": 59,
+      "usable_sightlines": 1261
+    },
+    "build_seconds": 1.037,
+    "separation_m": 14.0,
+    "before": {
+      "total": 110,
+      "buried": 44,
+      "covered": 62,
+      "buried_on_rubble": 9,
+      "surface_near_wall": 17,
+      "wet": 4,
+      "blocked_sightlines": 29,
+      "usable_sightlines": 1431
+    }
+  }
+}

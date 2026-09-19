@@ -1,7 +1,7 @@
 """Robot bodies and the demo roster.
 
 Bodies here are hand-set placeholders that satisfy the four-lane rescue chain. They are
-replaced by elites selected out of the MAP-Elites archive
+replaced on D9 by elites selected out of the MAP-Elites archive
 (``training/mapelites/select.py`` -> ``assets/scenarios/demo_roster.yaml``); this module
 keeps the same ``RobotSpec`` shape so nothing downstream changes when that happens.
 """
@@ -132,7 +132,7 @@ def default_roster(per_lane: int, rng: np.random.Generator,
 
 
 #: Where `training/mapelites/select.py` writes the evolved roster. Absent until a
-#: MAP-Elites run has produced one.
+#: MAP-Elites run has produced one, which is the normal state before D9 completes.
 ROSTER_PATH = Path(__file__).resolve().parents[2] / "assets" / "scenarios" / (
     "demo_roster.yaml")
 
@@ -167,7 +167,7 @@ def evolved_roster(per_lane: int, rng: np.random.Generator,
     elite, and it keeps the id scheme and lane balance that everything downstream
     assumes.
     """
-    # `use_evolved=False` is how the gate gets a genuinely classical arm. Previously it
+    # `use_evolved=False` is how the gate gets a genuinely classical arm. Until D12 it
     # could not: `World` loaded the roster unconditionally, so the "classical baseline"
     # ran evolved *bodies* with a classical bid and the comparison measured something
     # other than what it claimed. A control arm nobody can construct is not a control.

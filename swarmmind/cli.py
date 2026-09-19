@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
                      help="permit the Anthropic rung of the ladder (needs network)")
     run.add_argument("--response-team", nargs="?", const="workswarm",
                      choices=("workswarm", "local", "heuristic"),
-                     help="optional lead/logistics/safety team; default uses WorkSwarm")
+                     help="optional lead/logistics/safety team; default uses native WorkSwarm Leader/Teammate")
     run.add_argument("--team-python", help="interpreter for the isolated team worker")
     run.add_argument("--team-trace", default="runs/team/trace.jsonl",
                      help="team evidence log; a Markdown report is written alongside it")
@@ -45,6 +45,9 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--zone-routing", action="store_true",
                      help="exact fine-grid routing to collection points: +15 rescues with "
                           "Tier 3 silent, unresolved with it live (M-76e vs M-76f)")
+    run.add_argument("--edge-steering", action="store_true",
+                     help="experimental steering through fine-linked coarse edges; "
+                          "off by default after a fixture regression (M-84)")
     run.add_argument("--unit-policy", metavar="heuristic|PATH.npz",
                      help="per-robot staging inside Tier 2: 'heuristic' for the classical "
                           "rule, or a trained policy (runs/rl/policy_best.npz). Kept and "
@@ -84,7 +87,7 @@ def _extras(args) -> dict:
     Printed when on, because a run that is not the shipped configuration must never be
     mistaken for one -- these change the seed-42 hash and every rehearsed beat.
     """
-    out: dict = {"zone_routing": args.zone_routing}
+    out: dict = {"zone_routing": args.zone_routing, "edge_steering": args.edge_steering}
     if args.response_team:
         out["response_team"] = {
             "mode": args.response_team, "python": args.team_python,
@@ -95,6 +98,8 @@ def _extras(args) -> dict:
               "(scripted fallback continues; accepted orders expire normally)")
     if args.zone_routing:
         print("  zone routing ON: exact routing to collection points (not the demo default)")
+    if args.edge_steering:
+        print("  edge steering ON: experimental; rescue improvement is unproven")
     if args.unit_policy:
         from .control.unit_policy import UnitController
 

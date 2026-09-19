@@ -156,7 +156,7 @@ def test_the_demo_path_reports_directives_and_wall_clock():
 
 
 def test_the_realtime_path_constructs():
-    """`--demo` previously broke because it had no other test coverage.
+    """`--demo` is the only path with no other test coverage, and it broke on D13.
 
     `evolved=` was added to `FastSim.__init__` for the gate's control arm; `DemoSim`
     overrides `__init__`, did not take it, and every headless test kept passing because

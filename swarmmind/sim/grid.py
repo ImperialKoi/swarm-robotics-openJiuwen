@@ -215,7 +215,7 @@ def distance_field(passable: np.ndarray, target_cell: tuple[int, int],
     under-estimates diagonal travel by up to ~30%.
 
     That is deliberate and acceptable: this field feeds *bid ranking* (section 5.2),
-    not path execution. Tier 1 plans real paths with A*. If evaluation shows bid quality
+    not path execution. Tier 1 plans real paths with A*. If D9 shows bid quality
     suffering, replace this with a bucketed 2:3 chamfer wavefront -- same signature.
     """
     ix, iy = target_cell

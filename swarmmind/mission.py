@@ -1,6 +1,6 @@
 """Assembly point: wire the world, Tier 1 and Tier 2 into a runnable mission.
 
-The bus plus the real node graph replaces ``HeuristicAssigner`` here
+D3 replaces ``HeuristicAssigner`` here with the bus plus the real node graph
 (blackboard, auction, events, fault_injector). The signature stays the same so the
 training rollouts and the gate do not change.
 """
@@ -43,7 +43,8 @@ class Mission:
                  allocator: str = "auction", hivemind: bool = True,
                  allow_api: bool = False, scripted_hivemind: bool = False,
                  genes=None, command: bool = False, evolved: bool = True,
-                 unit_policy=None, zone_routing: bool = False, response_team=None) -> None:
+                 unit_policy=None, zone_routing: bool = False, response_team=None,
+                 edge_steering: bool = False) -> None:
         if response_team is not None and not hivemind:
             raise ValueError("response_team requires the directive filter; remove --no-hivemind")
         self.sim = (DemoSim if realtime else FastSim)(scenario, seed, evolved=evolved)
@@ -52,7 +53,7 @@ class Mission:
         #: searching robots only. `None` is the shipped swarm, unchanged.
         self.unit_policy = unit_policy
         w = self.sim.world
-        self.nav = NavSet(w)
+        self.nav = NavSet(w, edge_steering=edge_steering)
         # **Off by default, and that is a measurement rather than caution (M-76f).** The fix
         # is real with Tier 3 silent -- +7.5 rescues on the M1 and +15.0 on Kaggle, up on 8
         # of 8 seed-arms -- but the demo runs Tier 3 live, and there the two machines
@@ -108,7 +109,7 @@ class Mission:
         self._hb_every = max(1, int(round(scenario.rates.tick_hz / scenario.rates.heartbeat_hz)))
         self._bb_every = max(1, int(round(scenario.rates.tick_hz / scenario.rates.blackboard_hz)))
 
-        # Perception. The detector is swappable (classical or CNN); nothing
+        # Perception. The detector is swappable (classical now, CNN at D11); nothing
         # above this line knows which one is running.
         self.raster = AppearanceRaster(w)
         self.rig = CameraRig(w)
@@ -159,18 +160,20 @@ class Mission:
         # the speed of anything else and pays for it by only looking once it lands, so
         # a rotor sprinting across the map lifts no fog on the way.
         idx = np.nonzero(alive & ~w.airborne & (moved | self._cam_never))[0]
-        if len(idx) == 0:
-            return
-        self._cam_never[idx] = False
-        self._last_cam_pos[idx] = w.pos[idx]
+        if len(idx):
+            self._cam_never[idx] = False
+            self._last_cam_pos[idx] = w.pos[idx]
 
-        frames, cells = self.rig.capture(w, self.raster.render(w), idx)
-        w.mark_seen(cells, idx)
+            frames, cells = self.rig.capture(w, self.raster.render(w), idx)
+            w.mark_seen(cells, idx)
         # Independent of the movement gate above: a robot that has stopped still knows
         # what it is standing on, and a rotor that has just set down has no trail.
         w.mark_underfoot(np.nonzero(alive & ~w.airborne)[0])
-        self.tracker.ingest(w, self.detector.detect(w, self.rig, frames, idx))
+        if len(idx):
+            self.tracker.ingest(w, self.detector.detect(w, self.rig, frames, idx))
 
+        # A reconnect can supply evidence while every robot is stationary. The frame
+        # movement gate must not suspend resolution, underfoot sensing or report expiry.
         for report, was_real, by in self.tracker.resolve(w):
             if was_real and report.victim is not None:
                 w.mark_found(report.victim, by)
@@ -216,7 +219,7 @@ class Mission:
                                emit=self._emit, bus=self.bus)
         goal_xy, goal_id = self.executor.goals(w, self.nav)
         stop_r = self.executor.stop_radii(w, self.reflex.p.arrive_radius)
-        v, omega = self.reflex.commands(w, self.nav, goal_xy, goal_id, stop_r)
+        arrived = self.reflex.arrived_at_goals(w, goal_xy, goal_id, stop_r)
         # Rotors fly while they have somewhere to be and land the moment they arrive --
         # **or the moment they are over ground nobody has seen.**
         #
@@ -233,11 +236,28 @@ class Mission:
         # So a rotor over dark ground sets down and looks. It keeps its 2x dash across
         # ground the swarm already knows, which is the point of the lane, and pays the
         # speed back exactly where the map still needs reading.
-        air = self._rotor & (goal_id >= 0) & ~self.reflex.last_arrived
+        can_land = w.can_land()
+        # Reaching the horizontal arrival disc above a river is not a landing. Keep
+        # approaching the task's dry target until the whole body can set down.
+        arrived &= ~self._rotor | can_land
+        air = self._rotor & (w.status <= OUT_OF_COMMS) & (
+            ((goal_id >= 0) & ~arrived) | ~can_land)
         if self.rotors_land_to_look:
             ix, iy = grid.world_to_cell(w.pos[:, 0], w.pos[:, 1], w.cell, w.shape)
-            air &= w.explored[iy, ix]
+            seen_x, seen_y = grid.world_to_cell(
+                self._last_cam_pos[:, 0], self._last_cam_pos[:, 1], w.cell, w.shape)
+            inspected_here = ~self._cam_never & (ix == seen_x) & (iy == seen_y)
+            # Never try to inspect by setting down in a river, wall or steep face.
+            # Out-of-contact inspections are buffered, so shared fog alone would
+            # strand a rotor even after its own camera has looked at this cell.
+            air &= w.explored[iy, ix] | inspected_here | ~can_land
+        self._cam_never |= w.airborne & ~air
         w.airborne = air
+        # Choose the flight layer BEFORE steering, including the first takeoff tick.
+        v, omega = self.reflex.commands(w, self.nav, goal_xy, goal_id, stop_r, arrived)
+        # A rotor taking a ground camera sample waits for the next sensor pass. It
+        # must not crawl through rubble with its landing skids between flights.
+        v = np.where(self._rotor & ~air, 0.0, v)
         self.sim.step(v, omega)
         self.events.drain_world(w)
         if w.tick % self._bb_every == 0:
@@ -286,10 +306,10 @@ def run_mission(scenario: Scenario, seed: int, *, max_time: float | None = None,
     """The rollout entry point for training and the gate.
 
     **Tier 3 is off by default here, and on by default in `Mission`.** That asymmetry is
-    deliberate. MAP-Elites evolves Tier-2 behaviour parameters; if a scripted
+    deliberate. MAP-Elites (D9) evolves Tier-2 behaviour parameters; if a scripted
     strategic layer were reprioritising sectors underneath it, the fitness signal would
     be measuring the two together and the archive would encode a dependency on whichever
-    provider happened to answer. The gate compares learned against heuristic, and
+    provider happened to answer. The gate (D12) compares learned against heuristic, and
     both arms have to differ in exactly one thing.
 
     The demo runs with the hivemind on -- that is `Mission`'s default and what the CLI

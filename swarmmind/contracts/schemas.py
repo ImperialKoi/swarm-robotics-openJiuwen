@@ -108,6 +108,17 @@ class RobotState(_Msg):
     last_action_reason: str = ""
 
 
+class DashboardFlight(BaseModel):
+    """Additive dashboard `state.flight` payload; indices match the eight-column `r`.
+
+    Actual simulator flight mode, never inferred from chassis or activity. Older
+    recordings omit this object and render grounded. Bus RobotState is unchanged.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    airborne: list[bool]
+
+
 class SectorState(_Msg):
     id: str
     explored_pct: float

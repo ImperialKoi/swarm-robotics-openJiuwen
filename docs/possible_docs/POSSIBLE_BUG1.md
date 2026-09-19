@@ -1,7 +1,7 @@
 # POSSIBLE BUG 1 — the swarm covers ground it never examines
 
 **Status: diagnosed, not fixed.** No code was changed to produce any number below.
-Investigated against `f9b8b8f`, `demo` scenario, `hivemind=False` (the
+Recorded (D13), against `f9b8b8f`, `demo` scenario, `hivemind=False` (the
 control condition, invariant #1). Seed 42 unless a row says otherwise.
 
 Symptom as reported: *there are still a lot of victims left on the ground and not being

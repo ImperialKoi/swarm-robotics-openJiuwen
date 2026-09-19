@@ -1,0 +1,19 @@
+uv run ruff check swarmmind tests scripts
+All checks passed!
+uv run pytest
+.                                                                        [100%]
+1 passed in 0.49s
+uv run python -m swarmmind.cli run --headless --scenario test --seed 42
+
+  SwarmMind scorecard  seed=42  t=420.0s
+  ------------------------------------------------------------
+  victims rescued     4/8
+  victims found       6/8
+  ground explored     77.7%
+  robots lost         1/16
+  mean time to rescue 246.6s
+  energy used         7.15
+  directives          21 issued, 0 rejected
+  wall / rtf          17.04s / 24.65x
+  hash                86a44954eda1a756
+

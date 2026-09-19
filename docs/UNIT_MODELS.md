@@ -38,8 +38,9 @@ and applies the existing dark-red treatment.
 
 ## What the animations mean
 
-The dashboard uses only the existing eight-column robot row plus active excavation
-positions. No schema, topic, controller, event, policy or scenario changed.
+The dashboard uses the existing eight-column robot row, active excavation positions,
+and the additive `state.flight.airborne` array defined in `contracts/schemas.py`.
+Flight flags come from the simulator; old recordings without them remain grounded.
 
 - **Travel:** consecutive reported positions drive wheels and legs. Stationary robots
   keep their last locomotion pose. Reverse travel reverses the mechanism.
@@ -52,9 +53,13 @@ positions. No schema, topic, controller, event, policy or scenario changed.
 - **Scouting:** only ground scouts exploring/investigating sweep the camera housing.
   This is cosmetic articulation; simulated camera direction and field of view stay fixed
   by the robot's actual pose.
-- **Rotors:** blades spin for an operational unit. The frozen bridge does not report
-  airborne state, so the model stays at terrain height and does not infer takeoff, flight
-  altitude or landed sensing. A rotor scout does not perform the live camera sweep.
+- **Rotors:** blades spin for an operational unit. Airborne scouts, diggers and relays
+  fly above other units, rubble, water and walls. Their level chassis follows a continuous
+  altitude envelope with at least 8 m clearance above nearby terrain/water; it rises
+  before mountains and accounts for the complete footprint and coarse terrain meshes.
+  This is the height representation of the custom 2.5D simulator's flight layer, not
+  a 3D aerodynamic model. Rotors land on safe dry ground to inspect or work; airborne
+  cameras reveal no fog or casualties. A rotor scout does not perform the live camera sweep.
 - **Failure and stale data:** status ≥ 2 stops every mechanism. Fresh telemetry permits
   at most 0.2 s of visual phase extrapolation; stale/disconnected feeds stop advancing.
   Reconnection and simulation resets discard old motion history.
@@ -102,10 +107,12 @@ are released after eight seconds. Telemetry, colours, disabled state and travel 
 continue while a unit is culled. The demo's 512-unit initial overview now submits **49,188
 unit triangles**, versus 1,310,580 with every model at full resolution.
 
-Robots tilt and rest on the same continuous terrain triangles that Godot draws. Their
+Grounded robots tilt and rest on the same continuous terrain triangles that Godot draws. Their
 support footprint checks terrain vertices, including crests between feet and boundaries
 between terrain detail levels. Changing a tile's detail immediately refreshes unit poses.
-First-person hides the selected shell; chase retains its complete model.
+Airborne models remain level, and their camera anchors, distant silhouettes, culling
+and click selection use the same flight altitude. First-person hides the selected shell;
+chase retains its complete model.
 
 All 15 editable GLBs total approximately 5.3 MiB. Packaged Godot exports must include
 `assets/units/*.json` in the non-resource export filter. Editor runs need no extra setup.
@@ -137,4 +144,4 @@ checked. Executable Godot tests cover visibility, deferred mesh loading, LOD, ev
 telemetry continuity, terrain support and reconnection. Pytest runs these automatically
 when the engine is installed, and skips them on machines without Godot.
 
-Measurements and the final project check are recorded in [M-78](MEASUREMENTS.md#m-78--streamed-terrain-and-unit-detail).
+Measurements and the final project check are recorded in [M-78](MEASUREMENTS.md#m-78--streamed-terrain-and-unit-detail-17-sep).

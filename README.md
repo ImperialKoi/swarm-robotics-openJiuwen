@@ -8,7 +8,7 @@ when robots die, and a locally-run LLM issuing sector-level strategy every 6 sec
 The auction has no LLM in it, which is why the swarm keeps working when the hivemind goes offline.
 
 An optional **three-agent response team** adds a rescue lead, logistics specialist and
-safety reviewer using WorkSwarm's SwarmFlow engine and the local model. Peers can revise
+safety reviewer using openJiuwen/WorkSwarm's native Leader/Teammate system and the local model. Peers can revise
 or veto sector plans; validated orders affect the existing auction. The team has an
 independent trace and graceful scripted fallback.
 See [setup and complete demo instructions](docs/MULTI_AGENT_DEMO.md), including current

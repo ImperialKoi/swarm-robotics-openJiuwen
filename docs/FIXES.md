@@ -1,7 +1,7 @@
 # Problems faced, and what fixed them
 
 An index of every problem this project has hit and the change that resolved it, grouped by
-subsystem rather than by date.
+subsystem rather than by date. Recorded (D12).
 
 **This file duplicates nothing.** [MEASUREMENTS.md](MEASUREMENTS.md) is the chronological
 record and owns the numbers — M-*n* references below point into it.
@@ -174,6 +174,7 @@ visible.
 
 | # | problem | cause | fix | ref |
 |---|---|---|---|---|
+| ⚠️ | Steering crosses an edge rejected by the distance field | descent compared neighbour distances without checking the fine-derived edge mask | mask both reference and cached descent, accounting for their different direction order; **experimental `--edge-steering` only**, because the fixture rescue result regressed | M-84 |
 | ✅ | Swarm travelled 62 m in 420 s of a possible ~630 | four independent causes, below | 62 → 171 m; losses 147 → 61 | M-23 |
 | ✅ | …Tier 1 blind to terrain | repulsion and the swept-circle override both tested `occ == WALL` | both made chassis-aware | M-23 |
 | ✅ | …768 robots gridlocked at the start line | ~22 m staging disc, 2 m² per robot against a 2.5 m separation radius | radius derived from robot count and separation | M-23 |
@@ -191,6 +192,8 @@ visible.
 
 | # | problem | cause | fix | ref |
 |---|---|---|---|---|
+| ✅ | Airborne or disconnected robots resolved shared casualty reports | resolution checked horizontal proximity and survival only | require a grounded, connected inspector; leave the report pending otherwise | M-84 |
+| ✅ | Stationary robots stopped resolving or pruning reports, even after reconnect | the camera movement gate returned before report bookkeeping | gate only frame capture/detection; always resolve, prune and sense underfoot | M-84 |
 | ✅ | "The robots have computer vision" was false | `seen = dist <= sensor_radius` against ground-truth coordinates | appearance raster → egocentric occluded crop → detector → report tracker; oracle deleted | D3 / M-8 |
 | ✅ | Fully buried casualties invisible to every camera | rendered by blending toward rubble colour — a buried victim rendered as pure rubble | *size* carries the occlusion, not colour | M-7 |
 | ✅ | Zero false positives at every range | one noise value broadcast across R, G, B left `R − B` untouched | per-channel noise | M-7 |
@@ -207,6 +210,10 @@ visible.
 
 | # | problem | cause | fix | ref |
 |---|---|---|---|---|
+| ✅ | Pickup between auction cycles cached an unreachable collection point | the fast update rebuilt delivery goals without navigation fields | pass navigation through candidate selection so zone reachability is checked | M-84 |
+| ✅ | Idle carriers or carriers extracting a different casualty failed to deliver a pickup | opportunistic adoption skipped idle robots and every existing extract assignment | adopt the casualty actually held and exclude loaded carriers from free bids | M-84 |
+| ✅ | A loaded carrier's hazard retreat disappeared on the next tick | opportunistic adoption rewrote retreat as extraction | preserve retreat, then resume delivery after reaching safety | M-84 |
+| ✅ | Diggers remained assigned forever to partially cleared casualties they could not reach | partial debris alone counted as ongoing work | require a grounded digger within physical digging reach | M-84 |
 | ✅ | 512 robots, 24 assignments per second, the rest idle | `MAX_ANNOUNCED = 24`, sized against 22.4 ms *fine*-grid fields; bidding uses the cached coarse grid | cap scales with free-robot count (1.5x); 10/80 → 16/80 rescued | M-9 |
 | ✅ | 609 connect/disconnect events per mission, each orphaning a task | robots on the exact range boundary flapping | hysteresis — joining needs 0.92x the radius, staying needs 1.0x; flaps 609 → 40 | M-9 |
 | ✅ | One run ended with 0 of 16 robots in comms | orphaning *released* the robot, which then bid on a frontier and abandoned its relay post | orphaned work is re-offered **without** being taken away; antennas barred by policy from search work in both allocators | M-9 |
@@ -349,7 +356,7 @@ function — **not searching the same seven numbers harder.** Full record in
 | ⚠️ | Seed 42 hashes differently on the M1 and the Ryzen, with no sim code changed | platform float; `test_determinism.py` compares runs *within* a process, which is all invariant #6 claims | **a before/after pair must be taken on one machine.** A ±1-rescue platform delta is the same size as the effects being chased | M-40 |
 | ⚠️ | `mapelites/run.py` sizing comments say 1,350 evaluations; the default run is 690 | emitters went 5 → 4 and batch 30 → 15; the prose did not follow | open | M-38 |
 | ⚠️ | The suite is 11m14s, not the "seconds" CLAUDE.md claims | unsplit between platform and the suite growing at D9/D10 | open | M-38 |
-| ⚠️ | `FaultInjector._fire` emits `robot_destroyed`, then `world._kill` emits it again | one death, two events — the dashboard timeline shows a robot dying twice | `scripts/diagnose.py` de-duplicates by robot id; **the source is not fixed** | M-39 |
+| ✅ | `FaultInjector.step` emits `robot_destroyed`, then `world._kill` emits it again | one death, two events — the dashboard timeline shows a robot dying twice | The injector now relies on the world's single event; a regression test checks the drained event stream | M-39, M-84 |
 
 ---
 
@@ -398,7 +405,7 @@ anywhere.**
 | Relay tasks territorially fenced (`auction.py:157`) — only bites if a commander ships | run 1 | training_notes |
 | Wedges are bearing-cut pie slices; far slices are enormous | run 1 | training_notes |
 | MAP-Elites σ₀ 0.15 against [0,1] bounds → >100 resamples | run 0 | training_notes |
-| `FaultInjector` double-emits `robot_destroyed` | D11 | M-39 |
+| ~~`FaultInjector` double-emits `robot_destroyed`~~ **fixed** | D11 | M-39, M-84 |
 
 | Stale MAP-Elites sizing comments; 11-minute test suite | D10 | M-38 |
 | RuinsGR licence unresolved | D5d | M-16 |

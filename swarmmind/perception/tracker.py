@@ -226,7 +226,10 @@ class VictimReportTracker:
         open_reports = [r for r in self.reports if r.state == CONFIRMED]
         if not open_reports:
             return out
-        alive = world.status <= OUT_OF_COMMS
+        # This is a shared resolution, requiring both a ground inspection and a link.
+        # An aircraft passing overhead sees no ground frame, and a disconnected robot
+        # cannot publish confirmation. Keep the report pending until someone can.
+        alive = (world.status <= OUT_OF_COMMS) & ~world.airborne & world.in_comms
         if not alive.any():
             return out
 

@@ -10,6 +10,10 @@ const RUBBLE_LIFT := 1.0
 const SMOOTH_PASSES := 2
 const CLEARANCE := 0.045
 const WET := 0.02
+const FLIGHT_CLEARANCE := 8.0
+const FLIGHT_SLOPE := 0.5
+const FLIGHT_FOOTPRINT := 2.5
+const FLIGHT_MAX_STRIDE := 8
 
 var gw := 0
 var gh := 0
@@ -23,6 +27,7 @@ var water_depths := PackedFloat32Array()
 var water := PackedFloat32Array()
 var colors := PackedColorArray()
 var normals := PackedVector3Array()
+var flight_corners := PackedFloat32Array()
 
 
 func setup(heights: PackedFloat32Array, occupancy: PackedByteArray,
@@ -30,6 +35,7 @@ func setup(heights: PackedFloat32Array, occupancy: PackedByteArray,
 	gw = width
 	gh = depth
 	cell = cell_size
+	flight_corners.clear()
 	water = depths.duplicate()
 	assert(gw > 0 and gh > 0 and cell > 0.0)
 	assert(heights.size() == gw * gh and occupancy.size() == gw * gh)
@@ -214,7 +220,7 @@ func _corner(x: int, y: int) -> float:
 	return corners[clampi(y, 0, gh) * (gw + 1) + clampi(x, 0, gw)]
 
 
-func _sample(x: float, y: float, stride: int = 1) -> Vector3:
+func _sample(x: float, y: float, stride: int = 1, flying: bool = false) -> Vector3:
 	# Returns (height, dz/dx, dz/dy), choosing the rendered a-c-b / b-c-d diagonal.
 	stride = maxi(stride, 1)
 	var gx := clampf(x / cell, 0.0, float(gw))
@@ -225,10 +231,11 @@ func _sample(x: float, y: float, stride: int = 1) -> Vector3:
 	var ny := mini(iy + stride, gh)
 	var u := (gx - ix) / float(nx - ix)
 	var v := (gy - iy) / float(ny - iy)
-	var a := _corner(ix, iy)
-	var b := _corner(nx, iy)
-	var c := _corner(ix, ny)
-	var d := _corner(nx, ny)
+	var samples := flight_corners if flying else corners
+	var a := samples[iy * (gw + 1) + ix]
+	var b := samples[iy * (gw + 1) + nx]
+	var c := samples[ny * (gw + 1) + ix]
+	var d := samples[ny * (gw + 1) + nx]
 	if u + v <= 1.0:
 		return Vector3(a + (b - a) * u + (c - a) * v,
 			(b - a) / (float(nx - ix) * cell), (c - a) / (float(ny - iy) * cell))
@@ -245,7 +252,63 @@ func normal_at_world(x: float, y: float, stride: int = 1) -> Vector3:
 	return Vector3(-sample.y, 1.0, -sample.z).normalized()
 
 
-func robot_pose(x: float, y: float, heading: float, chassis: int = 0, stride: int = 1) -> Transform3D:
+func flight_height_at_world(x: float, y: float) -> float:
+	# Port of the cached max-plus envelope in terrain_surface.py. Full-map samples
+	# make altitude independent of visibility and of terrain tile residency.
+	if flight_corners.is_empty():
+		flight_corners = corners.duplicate()
+		for i in range(flight_corners.size()):
+			if water_depths[i] > 0.0:
+				flight_corners[i] = maxf(flight_corners[i], water_corners[i])
+		var radius := ceili(FLIGHT_FOOTPRINT / cell) + FLIGHT_MAX_STRIDE
+		var queue := PackedInt32Array()
+		queue.resize(maxi(gw, gh) + 1)
+		for axis in [0, 1]:
+			var source := flight_corners.duplicate()
+			var length := gh + 1 if axis == 0 else gw + 1
+			var lines := gw + 1 if axis == 0 else gh + 1
+			var step := gw + 1 if axis == 0 else 1
+			# A monotone queue makes dilation linear in map size, rather than
+			# rescanning a 23-cell window at every vertex on the first takeoff.
+			for line in range(lines):
+				var base := line if axis == 0 else line * (gw + 1)
+				var head := 0
+				var tail := 0
+				var next := 0
+				for at in range(length):
+					while next <= mini(at + radius, length - 1):
+						var value := source[base + next * step]
+						while tail > head and source[base + queue[tail - 1] * step] <= value:
+							tail -= 1
+						queue[tail] = next
+						tail += 1
+						next += 1
+					while queue[head] < at - radius:
+						head += 1
+					flight_corners[base + at * step] = source[base + queue[head] * step]
+		var fall := FLIGHT_SLOPE * cell
+		for cy in range(gh + 1):
+			var row := cy * (gw + 1)
+			for cx in range(1, gw + 1):
+				flight_corners[row + cx] = maxf(flight_corners[row + cx], flight_corners[row + cx - 1] - fall)
+			for cx in range(gw - 1, -1, -1):
+				flight_corners[row + cx] = maxf(flight_corners[row + cx], flight_corners[row + cx + 1] - fall)
+		for cx in range(gw + 1):
+			for cy in range(1, gh + 1):
+				var i := cy * (gw + 1) + cx
+				flight_corners[i] = maxf(flight_corners[i], flight_corners[i - gw - 1] - fall)
+			for cy in range(gh - 1, -1, -1):
+				var i := cy * (gw + 1) + cx
+				flight_corners[i] = maxf(flight_corners[i], flight_corners[i + gw + 1] - fall)
+		for i in range(flight_corners.size()):
+			flight_corners[i] += FLIGHT_CLEARANCE
+	return _sample(x, y, 1, true).x
+
+
+func robot_pose(x: float, y: float, heading: float, chassis: int = 0, stride: int = 1,
+		airborne: bool = false) -> Transform3D:
+	if airborne and chassis == 3:
+		return Transform3D(Basis(Vector3.UP, -heading), Vector3(x, flight_height_at_world(x, y), y))
 	var up := normal_at_world(x, y, stride)
 	up /= maxf(up.y, 0.000001)
 	var slope := Vector2(up.x, up.z).length()

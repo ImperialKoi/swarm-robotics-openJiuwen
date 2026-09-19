@@ -18,6 +18,12 @@ RUBBLE_LIFT = 1.0
 SMOOTH_PASSES = 2
 CLEARANCE = 0.045
 WET = 0.02
+# Display altitude for the simulator's binary flight layer, in metres. A cached
+# clearance envelope starts the climb before a ridge and stays level over ditches.
+FLIGHT_CLEARANCE = 8.0
+FLIGHT_SLOPE = 0.5
+FLIGHT_FOOTPRINT = 2.5
+FLIGHT_MAX_STRIDE = 8
 
 
 def _smoothstep(low, high, value):
@@ -148,8 +154,9 @@ class TerrainSurface:
         light /= np.linalg.norm(light)
         shade = .40 + .60*np.clip(self.normals @ light, 0, 1)
         self.colors = np.concatenate([colors*shade[..., None], np.ones((self.gh+1, self.gw+1, 1))], axis=-1)
+        self.flight_corners = None
 
-    def _sample(self, x, y, stride=1):
+    def _sample(self, x, y, stride=1, values=None):
         stride = max(1, int(stride))
         gx = np.clip(np.asarray(x, dtype=float) / self.cell, 0, self.gw)
         gy = np.clip(np.asarray(y, dtype=float) / self.cell, 0, self.gh)
@@ -157,8 +164,9 @@ class TerrainSurface:
         iy = np.minimum((gy/stride).astype(int)*stride, ((self.gh-1)//stride)*stride)
         nx, ny = np.minimum(ix+stride, self.gw), np.minimum(iy+stride, self.gh)
         u, v = (gx-ix)/(nx-ix), (gy-iy)/(ny-iy)
-        a, b = self.corners[iy, ix], self.corners[iy, nx]
-        c, d = self.corners[ny, ix], self.corners[ny, nx]
+        values = self.corners if values is None else values
+        a, b = values[iy, ix], values[iy, nx]
+        c, d = values[ny, ix], values[ny, nx]
         first = u+v <= 1
         z = np.where(first, a+(b-a)*u+(c-a)*v, d+(c-d)*(1-u)+(b-d)*(1-v))
         dx = np.where(first, b-a, d-c)/((nx-ix)*self.cell)
@@ -174,13 +182,48 @@ class TerrainSurface:
         normal = np.stack([-dx, -dy, np.ones_like(dx)], axis=-1)
         return normal / np.linalg.norm(normal, axis=-1, keepdims=True)
 
-    def robot_pose(self, x: float, y: float, heading: float, chassis=0, stride=1):
+    def flight_height_at_world(self, x, y):
+        """Continuous clearance above terrain, water, scenery and ground traffic.
+
+        Dilate by the body footprint plus the largest terrain tile stride: even a
+        coarse triangle spanning a valley cannot pierce the flight layer. The
+        max-plus envelope limits each axis to FLIGHT_SLOPE, lifting approaches to
+        mountains instead of snapping upward at their faces. Built once per map;
+        sampling costs four lookups and never consumes simulation RNG/state.
+        """
+        if self.flight_corners is None:
+            z = np.maximum(self.corners, np.where(self.water_depths > 0,
+                                                 self.water_corners, self.corners))
+            radius = int(np.ceil(FLIGHT_FOOTPRINT / self.cell)) + FLIGHT_MAX_STRIDE
+            for axis in (0, 1):
+                padding = [(0, 0), (0, 0)]
+                padding[axis] = (radius, radius)
+                padded = np.pad(z, padding, mode="edge")
+                for offset in range(2*radius+1):
+                    sl = [slice(None), slice(None)]
+                    sl[axis] = slice(offset, offset+z.shape[axis])
+                    np.maximum(z, padded[tuple(sl)], out=z)
+            for axis in (0, 1):
+                shape = [1, 1]
+                shape[axis] = z.shape[axis]
+                ramp = (np.arange(z.shape[axis])*self.cell*FLIGHT_SLOPE).reshape(shape)
+                z = np.maximum.accumulate(z+ramp, axis=axis)-ramp
+                z = np.flip(np.maximum.accumulate(np.flip(z-ramp, axis=axis), axis=axis), axis=axis)+ramp
+            self.flight_corners = z + FLIGHT_CLEARANCE
+        return self._sample(x, y, values=self.flight_corners)[0]
+
+    def robot_pose(self, x: float, y: float, heading: float, chassis=0, stride=1,
+                   *, airborne=False):
         """(3x3 basis, origin) in Z-up; its footprint rests above this same mesh.
 
-        Ground pose has no invented flight. The footprint contains wheels/tracks,
+        Flight requires the simulator's airborne telemetry. The footprint contains wheels/tracks,
         articulated feet and the scoop's forward reach. Lattice vertices bound crests
         between wheels that a centre sample or four contact samples would miss.
         """
+        if airborne and chassis in (3, "rotor"):
+            c, s = np.cos(heading), np.sin(heading)
+            basis = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+            return basis, np.array([x, y, self.flight_height_at_world(x, y)])
         normal = self.normal_at_world(x, y, stride)
         up = normal / max(normal[2], 1e-9)
         slope = np.linalg.norm(up[:2])

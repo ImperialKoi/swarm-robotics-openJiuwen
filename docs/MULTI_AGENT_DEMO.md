@@ -34,7 +34,8 @@ Use the stock Qwen2.5-1.5B-Instruct Q4_K_M GGUF documented in
 6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e
 ```
 
-`llama` must be on PATH. This checkout also has a local launcher in `.local/bin`.
+`llama` must be on PATH, or installed by the macOS Llama app at `~/.llama-app/llama`.
+The launcher also accepts `LLAMA_BIN=/absolute/path/to/llama`.
 The setup script installs the framework, not the model/server or Godot.
 
 If the model is missing, download the official artifact once and verify it before use:
@@ -51,7 +52,7 @@ shasum -a 256 assets/models/hivemind-base.gguf
 Terminal 1:
 
 ```bash
-PATH="$PWD/.local/bin:$PATH" ./scripts/serve_hivemind.sh
+CHAT_TEMPLATE=chatml CTX_SIZE=8192 ./scripts/serve_hivemind.sh
 ```
 
 Terminal 2, after the model says it is listening on port 8080:
@@ -78,7 +79,7 @@ uv run python -m swarmmind.cli run --headless --scenario test \
 
 That mode is explicitly **heuristic**, not an LLM demo. An ordinary headless command
 without `--response-team` retains its original behavior and deterministic hash.
-`--response-team local` uses the same collaboration with a smaller custom coordinator;
+`--response-team local` retains the earlier role workflow with a smaller custom coordinator;
 it must be described as custom orchestration, not WorkSwarm. `--team-python` can select
 an alternative isolated interpreter. `--no-hivemind` remains the Tier-3-silent control.
 
@@ -92,38 +93,58 @@ an alternative isolated interpreter. `--no-hivemind` remains the Tier-3-silent c
 
 ```mermaid
 flowchart LR
-    Goal --> Lead
-    Observations --> Lead
-    Lead --> Logistics
-    Logistics -->|alternative and evidence| Revision[Lead revision]
-    Logistics -->|agreement| Safety
-    Revision --> Safety
-    Safety -->|approve| Filter[Current-state feasibility filter]
+    Goal --> Leader
+    Observations --> Leader
+    Leader -->|native task assignment| Logistics
+    Logistics -->|recommendation in shared task| Safety
+    Safety -->|native verify_task vote| Scheduler[Native task scheduler]
+    Scheduler -->|completed and verified| Final[Leader acceptance]
     Safety -->|veto| Fallback[Scripted advisor]
+    Final --> Filter[Current-state feasibility filter]
     Filter -->|valid| Auction[Sector priority and auction]
     Filter -->|late or changed| Fallback
     Auction --> Outcomes[Observed subsequent work]
-    Outcomes --> Lead
+    Outcomes --> Leader
 ```
 
-The official WorkSwarm **SwarmFlow engine** executes a fixed Python workflow using
-`run_workflow`, `agent`, structured schemas and a custom `AgentBackend`. It does not
-launch the full workbench, browser, generic shell tools, or a separate MCP server.
-Our workflow invokes role-scoped Python tools over a detached observation, then passes
-their results and peer messages to the role's model context. Tool sequencing is fixed;
-the model chooses a candidate or veto, rather than generating arbitrary tool calls.
-The goal decomposition is also deliberately fixed, not model-generated task discovery.
+`--response-team` uses the official **native Leader/Teammate system**, through
+`TeamAgentSpec`, `LeaderSpec`, `TeamMemberSpec` and
+`Runner.run_agent_team_streaming`. The native runtime owns member execution, shared
+tasks, scheduler messages, logistics handoff, reviewer invocation, vote settlement
+and notification back to the leader. Members run in-process inside one isolated worker.
+Safety uses the scheduler's reviewer-scoped **`VerifyTaskTool`**; its model configuration
+is explicit because this SDK version does not inherit it from the team model pool.
 
-Roles share one local model server but have separate bounded contexts and decision
-authority. Logistics feedback can change the lead's actual order; safety disagreement
-blocks it. Tests cover both dependencies, and the live rehearsal includes a peer
-revision and a safety veto. This establishes useful cross-checking, not that one more
-capable agent could never do the same task.
+Our rescue tools wrap native task creation/completion and constrain candidate selection.
+SDK rails enforce each role's permissions, compact prompts and bound model calls.
+A small client extension registered through the SDK subclasses `OpenAIModelClient`:
+it requests JSON-schema-constrained arguments from local Qwen, validates them, and
+returns an SDK `ToolCall`. This works around the installed llama.cpp build ignoring
+required-tool selection. It does not choose arguments, invent votes, or execute tools;
+the native runtime remains responsible for coordination and execution. The four model
+responses are real local inference. Native SDK tests use an explicitly labeled HTTP
+response fixture instead.
+`api_key="local-no-secret"` is a placeholder required by the compatible client, not a
+cloud credential. The native runtime invokes each agent's registered model client;
+application orchestration does not call teammates directly. The old SwarmFlow
+`AgentBackend` is not used on this path. The prior `swarmflow.py` is historical only.
+
+The team topology and rescue task decomposition are predefined. The model chooses a
+candidate, an alternative, or a veto; the scheduler controls who runs next. This is a
+bounded native-team application, not unrestricted dynamic agent spawning. Generic
+filesystem, shell, browser, MCP, evolution and fork capabilities are disabled or excluded
+by the tool allowlist. A temporary SQLite task database is removed after each episode;
+previous observed outcomes cross episodes through the next snapshot.
+
+Roles share one local model server with separate contexts and authority. Logistics can
+change the recommendation, safety can veto it, and the leader must accept the exact
+verified choice. A final simulator filter still checks age and current feasibility.
+The earlier M-79 traces used SwarmFlow; they are **not native Leader/Teammate evidence**.
 
 ## End-to-end demonstration
 
 1. Start the mission and explain the user goal. Show `LIVE TEAM (workswarm)` once ready.
-2. Follow one proposal ID through lead, logistics and safety. Use the recorded tool
+2. Follow one proposal ID through lead, logistics, safety, and final leader acceptance. Use the recorded tool
    evidence to explain the choice; small-model notes can be inaccurate.
 3. Show `applied` and the sector change in Godot. A later task award in that sector is
    reported as an **association**, not proof the team caused a rescue.
@@ -154,14 +175,22 @@ This supplies unsupported rescue demand and a reachable exploration alternative.
 passes only if logistics changes the lead's proposal and the revised order is reviewed.
 It never dispatches synthetic observations to a running mission. Small-model behavior
 can fail this check; a failed check is recorded as a failure, never replaced by a canned
-transcript. Unit tests exercise the same branch deterministically without model calls.
+transcript. Native integration tests exercise these branches with deterministic HTTP model responses:
+
+```bash
+integrations/workswarm/.venv/bin/python integrations/workswarm/test_native.py
+```
+
+These load the real SDK and verify native task settlement, peer revision, safety veto,
+forged tool-argument rejection, token-budget exhaustion and repeated episodes. They do not
+establish real-model quality.
 
 ## Limits and safety boundaries
 
-- One workflow at a time, scheduled at most every 20 sim-seconds; up to four model
-  turns (including one revision). Periodic snapshots include prior outcomes; this
+- One native team episode at a time, scheduled at most every 20 sim-seconds; normally
+  four model calls, with a six-call ceiling for retries. Periodic snapshots include prior outcomes; this
   version does not implement a separate event-triggered scheduler.
-- 20-second workflow wall deadline, 5-second per-call timeout, 120 generated tokens
+- 20-second episode wall deadline, 8-second per-call/first-chunk timeout, 120 generated tokens
   per call, 9,000 total reported tokens. At most eight candidate sectors.
 - Results older than 20 sim-seconds, with mismatched IDs/evidence, or no longer feasible
   are rejected. Final application uses the existing feasibility filter on the sim thread.
@@ -189,9 +218,9 @@ The unit policy was **tuned on the four demo maps** and gated out. The historica
 `SHIPPING.md` gate results now carry a generated current-defaults annotation; an earlier
 zone-routing win with Tier 3 off does not override the later M-76f decision.
 
-The earlier runbook timings and rescue figures predate the current scenario. Use
-the new measured rehearsal record in [M-79](MEASUREMENTS.md#m-79--response-team-build),
-not those old timings, to describe this build. A complete clean cold-boot/offline rehearsal
+The  runbook timings predate the current scenario. M-79 describes the earlier
+SwarmFlow rehearsal; **M-82** and the [native recordings](../integrations/workswarm/examples/README.md)
+describe this Leader/Teammate build. A complete clean cold-boot/offline rehearsal
 and backup video remain operator preparation; the recorded trace is not a video.
 
 Measure the complete stack with:
@@ -204,8 +233,39 @@ This now includes the isolated team worker. The development machine was already 
 swapped; the observed swap growth prevents claiming a clean residency pass. Do not infer
 that an isolated worker footprint establishes a smooth full demo under all laptop loads.
 
-The final build passed **542 tests**, lint and the unchanged fixture smoke hash
+The earlier SwarmFlow build passed **542 tests**, lint and the unchanged fixture smoke hash
 `86a44954eda1a756`. [Recorded examples](../integrations/workswarm/examples/README.md)
 include the full-mission excerpt, a final-build real-runtime fixture and the failed
-synthetic diagnostic. The final fixture demonstrated revision, application and one
+synthetic diagnostic. That historical fixture demonstrated revision, application and one
 clean fallback acknowledgment while continuing to t=65.
+
+
+## Native migration validation
+
+The main `make check` passed **551 tests**, lint and the unchanged fixture smoke hash.
+After the final native prompt/worker fixes, the 65 response-team, knowledge-boundary and
+bridge checks passed. The isolated SDK suite passed five coordination cases and two
+requests through the actual worker protocol, using an HTTP test double.
+
+Real inference was separately verified with the stock local Qwen model and the installed
+native SDK. The t=80 simulator fixture applied two reviewed orders, continued after team
+shutdown at 1.00× realtime, and expired both leases. Native model/task execution took
+12.553 s and 16.639 s; normal 20-second deadlines remained enabled. These results do not
+establish rescue uplift. See M-82 for the demo-map check and measurement limits.
+
+A short memory sample measured the worker at 246 MB. It does not replace a full offline
+rehearsal with the dashboard on the presentation machine. The API/cloud rung remains
+unverified and is not used by the native team.
+
+
+The **final model-adapter build** also ran on the actual **512-robot seed-42 map**
+through t=65. Three native orders were applied, including a real logistics revision
+from D5 to A6 followed by safety approval and final leader acceptance. Episodes took
+12.429, 12.704 and 17.064 seconds under the unchanged 20-second total limit. The fourth
+request was cancelled at mission end. See the [recorded native map smoke](../integrations/workswarm/examples/native-demo-smoke.md).
+
+That short run took 91.90 wall-seconds (**0.71× realtime**) on the loaded laptop. Native
+coordination is verified, but this is not a smooth full-length presentation rehearsal.
+The final SDK adapter suite passed all five coordination cases and both worker requests;
+lint and the 65 core boundary/protocol checks passed again. Older native recordings
+above precede the final format adapter and are labeled accordingly.

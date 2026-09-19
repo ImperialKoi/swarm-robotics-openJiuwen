@@ -152,9 +152,9 @@ def test_recall_degrades_with_range(w):
     """A detector that sees as well at 6.5 m as at 2 m is not doing vision.
 
     This used to assert *precision* degraded instead. That stopped holding once casualty
-    placement was fixed to require clearance and nav-grid reachability: casualties now
-    stand in open ground, so a robot facing one sees floor rather than the warm rubble
-    that produces phantoms. Recall is the property that survives the change -- and
+    placement was fixed to require clearance and nav-grid reachability. Placement now
+    prefers debris and wall margins, but precision still depends on what terrain is
+    in each frame. Recall is the property this test checks -- and
     phantoms are covered by test_phantoms_come_from_rubble below.
     """
     ras, rig, det = AppearanceRaster(w), CameraRig(w), ClassicalVictimDetector()

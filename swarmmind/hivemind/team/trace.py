@@ -48,7 +48,7 @@ class Trace:
                     f.flush()
                     outcome = row["event"] == "outcome" and row.get("request") not in shown_outcomes
                     if self.console and (outcome or row["event"] in {
-                        "ready", "message", "revision_requested", "revised", "applied",
+                        "ready", "native_team", "native_task", "message", "revision_requested", "revised", "applied",
                         "rejected", "fallback", "disabled", "withheld", "finished",
                     }):
                         note = row.get("note", row.get("reason", row.get("directive", "")))
@@ -61,6 +61,8 @@ class Trace:
                             note = f"{row['observed']} (association, not causal attribution)"
                         elif row["event"] == "ready":
                             note = f"LIVE TEAM ({row['runtime']})"
+                        elif row["event"] in {"native_team", "native_task"}:
+                            note = {k: v for k, v in row.items() if k not in {"event", "request", "kind"}}
                         elif row["event"] == "finished":
                             note = row.get("stats", row.get("result", ""))
                         print(f"  TEAM {row.get('request', '')} {row.get('role', '')} "
@@ -90,7 +92,7 @@ def render_report(path):
              "This is an execution trace, not a claim of rescue uplift.", "",
              "| Request | Stage | Role | Evidence / result |", "|---|---|---|---|"]
     for row in rows:
-        if row["event"] not in {"started", "decomposed", "message", "revision_requested", "revised",
+        if row["event"] not in {"started", "native_team", "native_task", "decomposed", "message", "revision_requested", "revised",
                                "reviewed", "applied", "rejected", "fallback", "withheld", "veto",
                                "expired", "disabled", "finished", "trace_status"}:
             continue

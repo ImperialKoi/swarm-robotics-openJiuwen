@@ -2,7 +2,7 @@
 
 Reach gates exploration, exploration gates discovery, and discovery gates rescues --
 so a regression here is invisible in the relay lane and shows up as a rescue count.
-Both properties below guard previously observed regressions.
+Both properties below are the ones that were false before D12.
 """
 
 from __future__ import annotations

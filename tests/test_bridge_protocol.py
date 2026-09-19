@@ -153,6 +153,29 @@ def test_state_shape_matches_the_renderer(payloads):
         assert key in st["hud"], f"HUD is missing {key!r}"
 
 
+def test_flight_telemetry_is_actual_mode_and_keeps_the_eight_column_contract():
+    import numpy as np
+
+    from swarmmind.contracts.schemas import DashboardFlight
+    from swarmmind.sim.robot import CHASSIS_INDEX, FAILED
+
+    m = Mission(Scenario.load("test"), 42, hivemind=False)
+    w = m.world
+    rotors = np.flatnonzero(w.chassis == CHASSIS_INDEX["rotor"])
+    w.airborne[rotors[:2]] = True
+    w.status[rotors[1]] = FAILED
+    bridge = BridgeNode(w, WebSocketServer(port=8799))
+    state = bridge._state(w, m.executor, m.tracker)
+    flight = DashboardFlight.model_validate(state["flight"])
+    expected = np.zeros(w.n, dtype=bool)
+    expected[rotors[0]] = True
+    assert flight.airborne == expected.tolist()
+    assert all(len(row) == 8 for row in state["r"])
+    src = GD.read_text()
+    assert 'airborne = msg.get("flight", {}).get("airborne", [])' in src
+    assert 'airborne.clear()' in src
+
+
 def test_detector_overlay_uses_the_real_camera_geometry():
     """The contact overlay decides what is in field with the rig's own bearing mapping.
 
@@ -548,7 +571,7 @@ def test_the_chase_camera_sits_behind_the_unit_it_follows():
 
 def test_the_dashboard_and_the_simulator_agree_on_the_contract_version(payloads):
     """`version.py` says bumping SCHEMA_VERSION requires updating the Godot parser in the
-    same commit -- but previously the version was never sent and never checked, so nothing
+    same commit -- but until D12 the version was never sent and never checked, so nothing
     enforced that. A stale dashboard against a newer sim would have failed the M-12 way:
     silently, with both sides reporting success.
     """

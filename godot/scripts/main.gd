@@ -203,6 +203,7 @@ var zones: Array = []
 var scenario_name := ""
 #: Robot ids from the hello, in the same order as the state frame's rows.
 var robot_ids: Array = []
+var airborne: Array = []
 var sector_ids: Array = []
 
 # Casualty mesh remains separate from streamed procedural ruin geometry.
@@ -220,6 +221,7 @@ var markers: Node3D
 var mk_contact: MultiMeshInstance3D
 var mk_victim: MultiMeshInstance3D
 var mk_body: MultiMeshInstance3D
+var mk_burial: MultiMeshInstance3D
 var mk_hazard: MeshInstance3D
 var ground: TerrainStream
 var _terrain_revision := -1
@@ -321,6 +323,8 @@ var _chase_az := 0.0
 var _chase_of := -1
 var god_view := false
 var show_victims := false
+var thermal_on := false
+var thermal: ThermalVision
 var colour_by_chassis := false
 var _drag := false
 var _pan := false
@@ -408,6 +412,9 @@ func _ready() -> void:
 	cam.make_current()
 
 	_build_ui()
+	thermal = ThermalVision.new()
+	add_child(thermal)
+	thermal.setup(self)
 	_connect_ws()
 
 
@@ -499,6 +506,7 @@ func _process(delta: float) -> void:
 	# frame's pose, not last frame's.
 	_update_detector_hud()
 	_step_fx(delta)
+	thermal.update_view(self)
 	ui.tick(delta)
 
 
@@ -508,6 +516,8 @@ func _handle(msg: Dictionary) -> void:
 			_on_hello(msg)
 		"state":
 			robots = msg.get("r", [])
+			# Additive contracts.schemas.DashboardFlight; old recordings stay grounded.
+			airborne = msg.get("flight", {}).get("airborne", [])
 			_update_sectors(msg.get("sec", []))
 			reports = msg.get("reports", [])
 			_set_digs(msg.get("digs", []))
@@ -534,6 +544,10 @@ func _on_hello(msg: Dictionary) -> void:
 	# A reconnect/reset starts a fresh trajectory even when the roster is identical.
 	ready_world = false
 	robots.clear()
+	airborne.clear()
+	truth_victims.clear()
+	truth_hazard = null
+	reports.clear()
 	_out_until.clear()
 	if bots != null:
 		bots.reset_motion()
@@ -672,6 +686,25 @@ func _robot_surface_pose(x: float, y: float, heading: float, chassis: int) -> Tr
 	return ground.robot_pose(x, y, heading, chassis)
 
 
+func _robot_flight_pose(x: float, y: float, heading: float, chassis: int) -> Transform3D:
+	return surface.robot_pose(x, y, heading, chassis, 1, true)
+
+
+func _is_airborne(i: int) -> bool:
+	return i >= 0 and i < robots.size() and i < airborne.size() and bool(airborne[i]) \
+		and int(robots[i][6]) == 3 and int(robots[i][4]) < 2
+
+
+func _unit_pose(i: int, detailed: bool = false) -> Transform3D:
+	var r: Array = robots[i]
+	if _is_airborne(i):
+		return _robot_flight_pose(r[0], r[1], r[2], int(r[6]))
+	var pose := ground.robot_pose(r[0], r[1], r[2], int(r[6]))
+	if detailed:
+		pose.origin.y = maxf(pose.origin.y, surface.robot_pose(r[0], r[1], r[2], int(r[6])).origin.y)
+	return pose
+
+
 func _mesh_of(path: String) -> Mesh:
 	"""Godot imports glTF as a PackedScene, so pull the Mesh out for MultiMesh use."""
 	var res := load(path)
@@ -778,6 +811,18 @@ func _build_markers() -> void:
 		mk_body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		markers.add_child(mk_body)
 
+	# Rubble is real depth-tested geometry, not a coloured pin. One small shared mesh
+	# covers bodies until the existing state reports excavation complete.
+	var rubble := MultiMesh.new()
+	rubble.transform_format = MultiMesh.TRANSFORM_3D
+	rubble.mesh = Burial.build_mesh()
+	rubble.instance_count = 0
+	mk_burial = MultiMeshInstance3D.new()
+	mk_burial.multimesh = rubble
+	mk_burial.material_override = mat
+	mk_burial.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	markers.add_child(mk_burial)
+
 	var ring := TorusMesh.new()
 	ring.inner_radius = 1.9
 	ring.outer_radius = 2.5
@@ -830,6 +875,21 @@ func _update_markers() -> void:
 
 	# Ground truth: operator only. Nothing in the swarm can see this.
 	var show := show_victims or god_view
+	var buried_sites: Array = []
+	if show:
+		for row: Array in truth_victims:
+			if Burial.needs_excavation(row):
+				buried_sites.append(row)
+	else:
+		# Normal operator view uses confirmed buried contacts only. Unknown truth
+		# positions must not reveal casualties before the swarm finds them.
+		for report: Array in reports:
+			if int(report[2]) == 1:
+				buried_sites.append(report)
+	mk_burial.multimesh.instance_count = buried_sites.size()
+	for i in range(buried_sites.size()):
+		var site: Array = buried_sites[i]
+		mk_burial.multimesh.set_instance_transform(i, _casualty_pose(site[0], site[1]))
 	mk_victim.visible = show
 	if mk_body:
 		mk_body.visible = show
@@ -843,31 +903,45 @@ func _update_markers() -> void:
 				live.append(v)
 		vmm.instance_count = live.size()
 		if bmm:
-			bmm.instance_count = live.size()
+			bmm.instance_count = live.filter(func(row: Array) -> bool: return int(row[2]) < 3).size()
+		var body_index := 0
 		for i in range(live.size()):
 			var v: Array = live[i]
 			var ground := _surface_height(v[0], v[1])
-			# Buried casualties sit lower, so the toggle also shows which need digging.
+			# Only casualties still awaiting excavation get the lower pin and body.
 			# The pin is 3.0 m tall and drawn point-down, so the centre sits 1.5 m above
 			# where the tip lands: 0.9 m over a buried casualty, 2.1 m over a surface one.
-			var lift: float = 2.4 if int(v[3]) == 1 else 3.6
+			var buried := Burial.needs_excavation(v)
+			var lift: float = 2.4 if buried else 3.6
 			var t := Transform3D(Basis(Vector3.RIGHT, PI),
 				world_to_godot(v[0], v[1], ground + lift))
 			vmm.set_instance_transform(i, t)
-			if bmm:
+			if bmm and int(v[2]) < 3:
 				# Yaw is cosmetic -- the simulator has no victim heading -- but it must
 				# be stable, so it comes from the position rather than an RNG that would
 				# make bodies spin as the array reorders.
-				var yaw := fposmod(v[0] * 1.7 + v[1] * 3.1, TAU)
-				var b := Basis(Vector3.UP, yaw).scaled(Vector3.ONE * VICTIM_SCALE)
-				bmm.set_instance_transform(i,
-					Transform3D(b, world_to_godot(v[0], v[1], ground + 0.05)))
+				bmm.set_instance_transform(body_index, _casualty_body_pose(v[0], v[1], buried))
+				body_index += 1
 		if truth_hazard != null:
 			var hx: float = truth_hazard[0]
 			var hy: float = truth_hazard[1]
 			var hr: float = maxf(float(truth_hazard[2]), 0.1)
 			var b := Basis().scaled(Vector3(hr * 2.0, 12.0, hr * 2.0))
 			mk_hazard.transform = Transform3D(b, world_to_godot(hx, hy, 6.0))
+
+
+func _casualty_pose(x: float, y: float) -> Transform3D:
+	var yaw := fposmod(x * 1.7 + y * 3.1, TAU)
+	if ground != null:
+		return ground.robot_pose(x, y, yaw, 0)
+	return Transform3D(Basis(Vector3.UP, -yaw), Vector3(x, 0.0, y))
+
+
+func _casualty_body_pose(x: float, y: float, buried: bool) -> Transform3D:
+	var pose := _casualty_pose(x, y)
+	pose.origin += pose.basis.y * (Burial.BURIED_LIFT if buried else Burial.SURFACE_LIFT)
+	pose.basis = pose.basis.scaled(Vector3.ONE * VICTIM_SCALE)
+	return pose
 
 
 func _build_bots() -> void:
@@ -885,7 +959,7 @@ func _update_robots(state_frame: bool = false) -> void:
 		return
 	if state_frame:
 		bots.sync_state(robots, digs, sim_time, _now, h_at, cell, gw, gh,
-			_robot_surface_pose, _surface_height)
+			_robot_surface_pose, _surface_height, airborne, _robot_flight_pose)
 	for i in range(robots.size()):
 		var r: Array = robots[i]
 		var status := int(r[4])
@@ -1383,6 +1457,8 @@ func _draw_detector(c: Control) -> void:
 	"""
 	if not _on_unit() or not ready_world or cam == null:
 		return
+	if _is_airborne(follow):
+		return  # Rotor cameras only inspect when landed, just like Mission._perceive.
 	var r: Array = robots[follow]
 	var bx: float = float(r[0])
 	var by: float = float(r[1])
@@ -1588,8 +1664,7 @@ func _update_camera(delta: float) -> void:
 	cam.v_offset = 0.0
 	if view_mode == View.POV and _on_unit():
 		var r: Array = robots[follow]
-		var pose := surface.robot_pose(r[0], r[1], r[2], int(r[6]))
-		pose.origin.y = maxf(pose.origin.y, ground.robot_pose(r[0], r[1], r[2], int(r[6])).origin.y)
+		var pose := _unit_pose(follow, true)
 		var eye := pose.origin + Vector3.UP * 1.1
 		var th := float(r[2])
 		var ahead := eye + Vector3(cos(th), -0.12, sin(th)) * 14.0
@@ -1606,6 +1681,8 @@ func _update_camera(delta: float) -> void:
 			centre = world_to_godot(r2[0], r2[1], 0.0)
 		centre += pan_off
 		centre.y = _surface_height(centre.x, centre.z)
+		if _is_airborne(follow):
+			centre.y = surface.flight_height_at_world(centre.x, centre.z)
 		var off := Vector3(
 			cos(orbit_yaw) * cos(orbit_pitch),
 			sin(orbit_pitch),
@@ -1648,8 +1725,7 @@ func _chase_camera(r: Array, delta: float) -> void:
 	slides `chase_pan` in the screen plane, which frames the unit without unpinning the
 	camera from it.
 	"""
-	var pose := surface.robot_pose(r[0], r[1], r[2], int(r[6]))
-	pose.origin.y = maxf(pose.origin.y, ground.robot_pose(r[0], r[1], r[2], int(r[6])).origin.y)
+	var pose := _unit_pose(follow, true)
 	var anchor := pose.origin + Vector3.UP * CHASE_ANCHOR_Z
 	var want_az := float(r[2]) + PI + chase_yaw
 	if _chase_of != follow:
@@ -1699,6 +1775,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		match event.keycode:
 			KEY_F:
 				toggle("view")
+			KEY_H:
+				toggle("thermal")
 			KEY_V:
 				toggle("victims")
 			KEY_C:
@@ -1752,6 +1830,10 @@ func toggle(what: String) -> void:
 	"""One entry point for every overlay switch, shared by the keys and the HUD's
 	overlay rows, so a click and a key press cannot do different things."""
 	match what:
+		"thermal":
+			thermal_on = not thermal_on
+			if thermal_on and view_mode == View.ORBIT:
+				_cycle_view()
 		"view":
 			_cycle_view()
 		"victims":
@@ -1847,8 +1929,7 @@ func _pick(screen_pos: Vector2) -> void:
 	var best := -1
 	var best_d := 40.0
 	for i in range(robots.size()):
-		var r: Array = robots[i]
-		var p := world_to_godot(r[0], r[1], _surface_height(r[0], r[1]) + 0.6)
+		var p := _unit_pose(i).origin + Vector3.UP * 0.6
 		if cam.is_position_behind(p):
 			continue
 		var d := cam.unproject_position(p).distance_to(screen_pos)

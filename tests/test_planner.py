@@ -53,7 +53,8 @@ def test_descend_points_downhill(world):
     assert np.all(f[ny, nx] < here)
 
 
-def test_descend_to_is_bit_identical_to_descend(world):
+@pytest.mark.parametrize("edge_steering", [False, True])
+def test_descend_to_is_bit_identical_to_descend(world, edge_steering):
     """The precomputed direction grid must reproduce `descend` exactly, not merely well.
 
     `descend` stays the reference definition of the manoeuvre; `descend_to` is an
@@ -61,7 +62,7 @@ def test_descend_to_is_bit_identical_to_descend(world):
     changes robot headings, and through them the seed-42 scorecard hash -- so this is
     `assert_array_equal`, not `allclose`.
     """
-    nav = NavFields(world.passable, world.cell)
+    nav = NavFields(world.passable, world.cell, edge_steering=edge_steering)
     rng = np.random.default_rng(7)
     h, w = nav.shape
     # Several goals, including one snapped out of a wall, and positions everywhere --
@@ -102,6 +103,26 @@ def test_goal_key_memo_survives_a_moving_goal(world):
     assert nav._resolve(bx, by) == nav._resolve(bx, by)
     far = nav._resolve(bx + 40.0, by + 20.0)
     assert far != nav._resolve(bx, by)
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_edge_steering_requires_explicit_cli_opt_in(monkeypatch, enabled):
+    from swarmmind import cli
+    from swarmmind.mission import Mission
+
+    missions = []
+
+    def capture(scn, seed, **kwargs):
+        mission = Mission(scn, seed, **kwargs)
+        missions.append(mission)
+        return mission
+
+    monkeypatch.setattr(cli, "Mission", capture)
+    args = ["run", "--headless", "--scenario", "test", "--max-time", "0"]
+    if enabled:
+        args.append("--edge-steering")
+    assert cli.main(args) == 0
+    assert all(nav.edge_steering == enabled for nav in missions[0].nav.nav)
 
 
 def test_field_cache_is_reused(world):

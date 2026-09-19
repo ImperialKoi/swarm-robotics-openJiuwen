@@ -19,6 +19,7 @@ import numpy as np
 from ..rng import RngBook
 from . import grid
 from . import terrain as terrain_gen
+from .placement import cover_masks, select_sites
 from .robot import (
     ACTIVE,
     AIRBORNE_SPEED,
@@ -196,7 +197,7 @@ class World:
         # An evolved roster if MAP-Elites has produced one, the hand-set archetypes
         # otherwise. The fallback is not a degraded mode -- `control/heuristic.py` and
         # its archetypes are the gate's baseline, and a run with no archive present must
-        # behave exactly as it did with the classical controller.
+        # behave exactly as it did before D9.
         self.specs: list[RobotSpec] = evolved_roster(
             scenario.robots_per_lane, self.rng["robots"],
             counts=scenario.lane_counts or None, use_evolved=evolved,
@@ -273,22 +274,24 @@ class World:
     def _place_victims(self) -> list[Victim]:
         rng = self.rng["victims"]
         cfg = self.scn.victims
-        reachable = self.passable & np.isfinite(self.dist_from_base) & self._navigable()
+        # People lie on dry, workable ground, not in the water a legged robot can wade.
+        reachable = self._navigable() & (self.water == 0)
         # Never place a victim inside an extraction disc -- it would be free.
         gx, gy = grid.cell_centres(self.shape, self.cell)
         for kx, ky, kr in self.scn.keepouts():
             reachable &= ((gx - kx) ** 2 + (gy - ky) ** 2) > (kr * 1.5) ** 2
 
         iy, ix = np.nonzero(reachable)
+        xy = np.column_stack([gx[iy, ix], gy[iy, ix]])
+        near_wall, near_rubble = cover_masks(self.occ, self.cell, cfg.cover_radius_m)
         d = self.dist_from_base[iy, ix]
         weight = np.power(np.maximum(d, 1.0), cfg.distance_weight_exp)
-        weight /= weight.sum()
 
         # Weighted draw without replacement via the Gumbel top-k trick -- same
         # distribution as rng.choice(replace=False, p=...) but vectorised rather than
         # an O(n*k) Python loop over ~20k candidate cells.
         keys = np.log(weight) + rng.gumbel(size=len(ix))
-        order = np.argsort(keys)[::-1][: max(8000, cfg.count * 400)]
+        order = np.argsort(keys, kind="stable")[::-1]
 
         # Relax separation rather than failing outright. Terrain legitimately shrinks the
         # placeable region -- water, steep ground, and cells no carrier can reach are all
@@ -297,17 +300,12 @@ class World:
         # casualties is a requirement.
         chosen: list[int] = []
         for relax in (1.0, 0.75, 0.5, 0.3, 0.0):
-            sep2 = (cfg.min_separation_m * relax) ** 2
-            chosen = []
-            for k in order:
-                if len(chosen) == cfg.count:
-                    break
-                px, py = gx[iy[k], ix[k]], gy[iy[k], ix[k]]
-                if all(
-                    (px - gx[iy[c], ix[c]]) ** 2 + (py - gy[iy[c], ix[c]]) ** 2 >= sep2
-                    for c in chosen
-                ):
-                    chosen.append(k)
+            chosen = select_sites(
+                xy, order, self.occ[iy, ix] == grid.RUBBLE,
+                near_wall[iy, ix], near_rubble[iy, ix], count=cfg.count,
+                buried_count=cfg.buried_count, cover_fraction=cfg.cover_fraction,
+                separation=cfg.min_separation_m * relax,
+            )
             if len(chosen) == cfg.count:
                 self.victim_separation = cfg.min_separation_m * relax
                 break
@@ -318,14 +316,9 @@ class World:
                 f"victims.count, or ease map.n_clusters / terrain."
             )
 
-        # Bury the deepest: pick buried_count from the farthest 60% of those chosen.
-        dists = np.array([self.dist_from_base[iy[c], ix[c]] for c in chosen])
-        far_pool = np.argsort(dists)[-max(cfg.buried_count, int(0.6 * len(chosen))):]
-        buried_idx = set(rng.choice(far_pool, size=cfg.buried_count, replace=False).tolist())
-
         victims = []
         for n, c in enumerate(chosen):
-            buried = n in buried_idx
+            buried = n < cfg.buried_count
             victims.append(
                 Victim(
                     id=f"v{n + 1}",
@@ -351,10 +344,13 @@ class World:
 
         Enforced by tests/test_world.py::test_every_casualty_is_reachable_and_workable.
         """
-        # Clearance from walls, and dry enough that a tracked carrier can work there.
+        # Clearance from walls, plus fine-grid access for the most capable carrier.
         clear = grid.clearance_mask(self.occ, cells=1) & (
             self.water <= CHASSIS_LIMITS["legged"][1] * 0.5
         )
+        legged = self.chassis_passable[CHASSIS_INDEX["legged"]]
+        base = grid.world_to_cell(*self.scn.base, self.cell, self.shape)
+        clear &= grid._flood(legged, (int(base[0]), int(base[1])))
 
         # Coarse-grid reachability, matching control.planner.NavFields exactly.
         factor = NAV_DOWNSAMPLE
@@ -362,7 +358,7 @@ class World:
         # collectable as long as the most capable of them can get there. Requiring
         # tracked access would delete every casualty behind a ridge -- and those are
         # exactly the ones that make the locomotion axis worth having.
-        coarse = grid.downsample(self.chassis_passable[CHASSIS_INDEX["legged"]], factor)
+        coarse = grid.downsample(legged, factor)
         bx, by = grid.world_to_cell(
             np.asarray(self.scn.base[0]), np.asarray(self.scn.base[1]),
             self.cell * factor, coarse.shape,
@@ -371,7 +367,10 @@ class World:
             piy, pix = np.nonzero(coarse)
             k = int(np.argmin((pix - int(bx)) ** 2 + (piy - int(by)) ** 2))
             bx, by = pix[k], piy[k]
-        creach = grid._flood(coarse, (int(bx), int(by)))
+        # Match NavFields' actual edges: adjacent coarse cells alone can invent a
+        # route through rock. Concealed sites must still have a real approach.
+        edges = grid.coarse_edge_masks(legged, factor)
+        creach = np.isfinite(grid.distance_field(coarse, (int(bx), int(by)), edges))
 
         h, w = self.shape
         fine = np.repeat(np.repeat(creach, factor, axis=0), factor, axis=1)[:h, :w]
@@ -525,6 +524,7 @@ class World:
         alive = self.status <= OUT_OF_COMMS
 
         # --- heading -----------------------------------------------------------
+        self.airborne &= alive & (self.chassis == CHASSIS_INDEX["rotor"])
         omega = np.clip(omega_cmd, -self.omega_max, self.omega_max) * alive
         self.theta = np.mod(self.theta + omega * dt, 2 * np.pi)
 
@@ -584,7 +584,7 @@ class World:
         # offered at the other ten collection points: a pad everywhere is a pad nowhere,
         # and the walk home is what makes charging a decision rather than scenery.
         pad = np.asarray(self.scn.base, dtype=float)
-        near = alive & (((self.pos - pad) ** 2).sum(axis=1) <= RECHARGE_RADIUS ** 2)
+        near = alive & ~self.airborne & (((self.pos - pad) ** 2).sum(axis=1) <= RECHARGE_RADIUS ** 2)
         if near.any():
             was = self.battery.copy()
             self.battery[near] = np.minimum(self.battery[near] + RECHARGE_RATE * dt, 1.0)
@@ -618,7 +618,11 @@ class World:
         every = max(1, int(round(self.scn.rates.tick_hz / hz)))
         return self.tick % every == 0
 
-    def _collides(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    def can_land(self) -> np.ndarray:
+        """Dry, traversable support for the entire body, even while in flight."""
+        return ~self._collides(self.pos[:, 0], self.pos[:, 1], allow_airborne=False)
+
+    def _collides(self, x: np.ndarray, y: np.ndarray, *, allow_airborne=True) -> np.ndarray:
         """True where a robot cannot stand: a wall, too steep for it, or too deep.
 
         Per-robot, keyed on chassis -- a slope a legged unit walks up is a wall to a
@@ -632,7 +636,10 @@ class World:
         ix, iy = grid.world_to_cell(px, py, self.cell, self.shape)
         ok = self.chassis_passable[self.chassis[:, None], iy, ix]
         # Flight clears everything underneath it.
-        ok |= self.airborne[:, None]
+        if allow_airborne:
+            ok |= self.airborne[:, None]
+        ok &= ((px >= 0) & (py >= 0)
+               & (px <= self.scn.map.width_m) & (py <= self.scn.map.height_m))
         return ~ok.all(axis=1)
 
     # ------------------------------------------------------------------ subsystems
@@ -867,7 +874,8 @@ class World:
                     v.state = CLEARED
                     continue
                 d2 = ((self.pos - v.pos) ** 2).sum(axis=1)
-                diggers = alive & (self.actuator == LANE_INDEX["scoop"]) & (d2 <= REACH_DIG ** 2)
+                diggers = (alive & ~self.airborne & (self.actuator == LANE_INDEX["scoop"])
+                           & (d2 <= REACH_DIG ** 2))
                 if diggers.any():
                     # Only so many machines fit around one casualty. Without a cap the
                     # rate scaled with however many diggers happened to be nearby, so a
@@ -938,6 +946,7 @@ class World:
 
     def _kill(self, i: int, cause: str) -> None:
         self.status[i] = DESTROYED
+        self.airborne[i] = False
         self.in_comms[i] = False
         # Whatever it had seen and not yet reported dies with it. Dropping the entry is
         # bookkeeping, not policy: `_store_and_forward` already skips the dead, so the

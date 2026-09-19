@@ -112,7 +112,7 @@ class TaskGenerator:
         self.lookahead_steps = lookahead_steps
         #: Cap on how many robots may be walking to the same search target. 0 = no cap.
         #:
-        #: **This was tried and reverted** (M-36): claiming search targets turned
+        #: **This was tried at D9 and reverted** (M-36): claiming search targets turned
         #: 629 scouts on 44 targets into 449 on 436, and rescues fell 13 -> 5. The reason
         #: was comms, not crowding -- spreading the swarm pushed scouts past the envelope
         #: and `mark_seen` records nothing from an out-of-contact robot, so the extra

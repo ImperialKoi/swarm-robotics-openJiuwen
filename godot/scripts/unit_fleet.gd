@@ -47,6 +47,7 @@ var _ground_times := PackedFloat64Array()
 var _ground_ready := PackedByteArray()
 var _surface_pose := Callable()
 var _surface_height := Callable()
+var _airborne := PackedByteArray()
 var _ground_centres_dirty := false
 var _previous := PackedVector2Array()
 var _travel := PackedFloat32Array()
@@ -188,6 +189,7 @@ func reset_motion() -> void:
 	_speed.fill(0.0)
 	_previous.clear()
 	_ground_ready.fill(0)
+	_airborne.fill(0)
 	invalidate_grounding()
 
 
@@ -218,6 +220,7 @@ func _map_roster(rows: Array) -> bool:
 	_headings.resize(rows.size())
 	_ground_times.resize(rows.size())
 	_ground_ready.resize(rows.size())
+	_airborne.resize(rows.size())
 	_travel.resize(rows.size())
 	_speed.resize(rows.size())
 	_slots.fill(-1)
@@ -254,7 +257,8 @@ static func animation_state(lane: int, chassis: int, activity: int, status: int,
 
 func sync_state(rows: Array, sites: Array, time: float, wall_time: float,
 		height_at: Callable, cell_size: float, grid_width: int, grid_height: int,
-		surface_pose: Callable = Callable(), surface_height: Callable = Callable()) -> void:
+		surface_pose: Callable = Callable(), surface_height: Callable = Callable(),
+		flight: Array = [], flight_pose: Callable = Callable()) -> void:
 	_map_roster(rows)
 	_surface_pose = surface_pose
 	_surface_height = surface_height
@@ -290,6 +294,10 @@ func sync_state(rows: Array, sites: Array, time: float, wall_time: float,
 		if not _catalog.has(_signature[i]):
 			continue
 		_headings[i] = float(r[2])
+		var flying := int(i < flight.size() and bool(flight[i]) and int(r[6]) == 3 and int(r[4]) < 2)
+		if flying != _airborne[i]:
+			_ground_ready[i] = 0
+		_airborne[i] = flying
 		var ix := clampi(int(point.x / cell_size), 0, grid_width - 1)
 		var iy := clampi(int(point.y / cell_size), 0, grid_height - 1)
 		var ground_height := float(height_at.call(ix, iy))
@@ -303,6 +311,8 @@ func sync_state(rows: Array, sites: Array, time: float, wall_time: float,
 		_poses[i] = Transform3D(Basis(Vector3.UP, -float(r[2])),
 			Vector3(point.x, ground_height, point.y))
 		_states[i] = animation_state(int(r[3]), int(r[6]), int(r[7]), int(r[4]), point, sites)
+		if _airborne[i] != 0 and flight_pose.is_valid():
+			_poses[i] = flight_pose.call(point.x, point.y, _headings[i], int(r[6]))
 	_dirty = true
 
 
@@ -359,7 +369,8 @@ func update_view(camera: Camera3D, followed_robot: int, force_detail: bool = fal
 	if _ground_centres_dirty:
 		if _surface_height.is_valid():
 			for i in range(_signature.size()):
-				_poses[i].origin.y = float(_surface_height.call(_previous[i].x, _previous[i].y))
+				if _airborne[i] == 0:
+					_poses[i].origin.y = float(_surface_height.call(_previous[i].x, _previous[i].y))
 		_ground_centres_dirty = false
 	var planes := camera.get_frustum()
 	var projection := camera.get_camera_projection()
@@ -434,7 +445,7 @@ func update_view(camera: Camera3D, followed_robot: int, force_detail: bool = fal
 		var hidden_slot := -1
 		for slot in range(indices.size()):
 			var i := indices[slot]
-			if _surface_pose.is_valid() and now - _ground_times[i] >= 0.09:
+			if _airborne[i] == 0 and _surface_pose.is_valid() and now - _ground_times[i] >= 0.09:
 				var point := _previous[i]
 				_poses[i] = _surface_pose.call(point.x, point.y, _headings[i], _signature[i] % 4)
 				_ground_times[i] = now

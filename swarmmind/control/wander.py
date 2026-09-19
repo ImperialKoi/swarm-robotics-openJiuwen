@@ -1,9 +1,9 @@
-"""Placeholder controller.
+"""D1 placeholder controller.
 
 Produces deterministic wandering motion so the tick loop, collisions, fog, comms and
 the victim state machine can all be exercised before Tier 1 exists.
 
-**Replaced** by ``control/tier1_reflex.py``. Nothing may depend on this beyond
+**Replaced on D2** by ``control/tier1_reflex.py``. Nothing may depend on this beyond
 smoke tests; it has no obstacle avoidance and no goal.
 """
 

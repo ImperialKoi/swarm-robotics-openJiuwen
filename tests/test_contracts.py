@@ -1,4 +1,4 @@
-"""The contract is FROZEN. These tests are the freeze."""
+"""The contract is FROZEN at D7. These tests are the freeze."""
 
 from __future__ import annotations
 

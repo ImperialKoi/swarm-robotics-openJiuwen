@@ -99,7 +99,7 @@ class AuctionNode:
         self.commander = commander
         #: Evolved Tier-2 behaviour, one genome per robot (`training.mapelites.genome`).
         #: `None` is the classical baseline and the gate's control arm -- every scalar
-        #: below stays a scalar, and the bid is byte-identical to the classical auction.
+        #: below stays a scalar, and the bid is byte-identical to the pre-D9 auction.
         self.genes = genes
         self.gen = TaskGenerator()
         self.w = weights or BidWeights(**world.scn.bid_weights)

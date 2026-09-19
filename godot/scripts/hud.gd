@@ -68,6 +68,7 @@ const METRICS := [
 #: Label, overlay id. The id is what `SwarmDashboard.toggle()` takes, so a click on the
 #: row and the key do exactly the same thing.
 const OVERLAYS := [
+	["H", "thermal vision", "thermal"],
 	["V", "casualties", "victims"],
 	["C", "colour by chassis", "chassis"],
 	["S", "hivemind sectors", "sectors"],
@@ -900,6 +901,10 @@ func _refresh() -> void:
 
 func _overlay_state(id: String) -> String:
 	match id:
+		"thermal":
+			if not host.thermal_on:
+				return "OFF"
+			return "ON" if host.thermal != null and host.thermal.active else "READY"
 		"victims":
 			return "ON" if host.show_victims else "OFF"
 		"chassis":
@@ -1050,6 +1055,9 @@ func _draw_view(c: Control) -> void:
 		left_ink = C_WARN
 	elif host.show_victims:
 		left = "CASUALTY PINS · GROUND TRUTH"
+		left_ink = C_WARN
+	elif host.thermal != null and host.thermal.active:
+		left = "THERMAL · SIMULATED SENSOR VIEW"
 		left_ink = C_WARN
 	var fwd := -cam.global_transform.basis.z
 	var az := fposmod(rad_to_deg(atan2(fwd.z, fwd.x)), 360.0)

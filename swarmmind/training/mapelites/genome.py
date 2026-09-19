@@ -34,7 +34,7 @@ import numpy as np
 from ...sim.robot import CHASSIS_LIMITS, LANES, RobotSpec
 
 #: Order is the archive's contract. Appending is safe; reordering invalidates every
-#: archive ever stored, so it must not happen after an archive is created.
+#: archive ever stored, so it does not happen after D9.
 GENE_NAMES: tuple[str, ...] = (
     # --- morphology ---------------------------------------------------------------
     "actuator_g",        # -> floor(g * 4) picks the lane

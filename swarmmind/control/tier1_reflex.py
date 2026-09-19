@@ -19,7 +19,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..sim import grid
-from ..sim.robot import OUT_OF_COMMS
+from ..sim.robot import AIRBORNE_SPEED, CHASSIS_INDEX, OUT_OF_COMMS
 
 #: Body-relative ray directions for local obstacle probing, fixed order.
 _RAYS = np.linspace(-np.pi, np.pi, 8, endpoint=False, dtype=np.float64)
@@ -40,7 +40,7 @@ class ReflexParams:
 
     These are hand-set defaults and the classical baseline. Several are also evolved as
     part of the Tier-2 genome (``formation_spacing`` -> ``separation_radius``); the
-    evolved values override per robot when a genome is supplied.
+    evolved values override per robot at D9.
     """
 
     w_goal: float = 1.0
@@ -81,7 +81,8 @@ class ReflexController:
 
     def commands(self, world, nav, goal_xy: list[tuple[float, float]],
                  goal_id: np.ndarray,
-                 stop_radius: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+                 stop_radius: np.ndarray | None = None,
+                 arrived: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
         """(v_cmd, omega_cmd) for every robot.
 
         ``goal_xy`` is the list of *distinct* goals this tick; ``goal_id`` is (N,) with
@@ -90,6 +91,7 @@ class ReflexController:
         """
         p = self.p
         alive = world.status <= OUT_OF_COMMS
+        world.airborne &= alive & (world.chassis == CHASSIS_INDEX["rotor"])
 
         self._goal_directions(world, nav, goal_xy, goal_id)
         self._obstacle_repulsion(world)
@@ -111,9 +113,10 @@ class ReflexController:
         v = world.v_max * gate * moving
 
         # Stop on arrival so robots settle instead of orbiting their goal.
-        arrived = self._arrived(world, goal_xy, goal_id, stop_radius)
-        # Kept so callers can tell who is parked without recomputing it -- `Mission`
-        # uses it to decide which rotors are still in the air.
+        if arrived is None:
+            arrived = self.arrived_at_goals(world, goal_xy, goal_id, stop_radius)
+        # Kept for diagnostics; Mission can supply arrival after checking landing
+        # support so an aircraft does not park over water inside the goal radius.
         self.last_arrived = arrived
         v = np.where(arrived, 0.0, v)
 
@@ -133,8 +136,11 @@ class ReflexController:
             if not at_goal.any():
                 continue
             gx, gy = goal_xy[gi]
+            flying = at_goal & world.airborne
+            delta = np.array([gx, gy]) - world.pos[flying]
+            self._dir[flying] = delta / np.maximum(np.linalg.norm(delta, axis=1, keepdims=True), 1e-9)
             for c in range(n_chassis):
-                m = at_goal & (world.chassis == c)
+                m = at_goal & (world.chassis == c) & ~world.airborne
                 if not m.any():
                     continue
                 d = nav.descend_to(c, gx, gy, world.pos[m, 0], world.pos[m, 1])
@@ -168,6 +174,7 @@ class ReflexController:
                 # water and steep slope: they drove straight into terrain, stalled
                 # against it, and covered 62 m in a 420 s mission out of a possible 630.
                 blocked = ~world.chassis_passable[world.chassis[:, None], iy, ix]
+                blocked &= ~world.airborne[:, None]
                 if reach == p.probe_near:
                     blocked_near = blocked
                 hit = blocked.astype(np.float64) * weight
@@ -230,6 +237,8 @@ class ReflexController:
         else:
             r2 = np.maximum(self._spacing[:, None], self._spacing[None, :]) ** 2
         w = np.where((self._d2 < r2) & (self._d2 > 1e-6), 1.0 / (self._d2 + 1e-3), 0.0)
+        # Aircraft pass above ground traffic; retain separation within each layer.
+        w *= world.airborne[:, None] == world.airborne[None, :]
         self._sep[:, 0] = (self._dx * w).sum(axis=1)
         self._sep[:, 1] = (self._dy * w).sum(axis=1)
         # Soft-saturate rather than normalise: crowding should push harder than a single
@@ -242,7 +251,7 @@ class ReflexController:
         self._spacing = (None if genes is None
                          else np.asarray(genes.formation_spacing, dtype=np.float32))
 
-    def _arrived(self, world, goal_xy, goal_id, stop_radius=None) -> np.ndarray:
+    def arrived_at_goals(self, world, goal_xy, goal_id, stop_radius=None) -> np.ndarray:
         arrived = np.zeros(world.n, dtype=bool)
         if not goal_xy:
             return arrived
@@ -267,7 +276,7 @@ class ReflexController:
         also prevent penetration; this exists so robots do not *try*, which is both
         visible on the dashboard and a waste of battery.
         """
-        step = v * world.dt
+        step = v * world.dt * np.where(world.airborne, AIRBORNE_SPEED, 1.0)
         ca, cb = np.cos(world.theta), np.sin(world.theta)
         blocked = np.zeros(world.n, dtype=bool)
         for frac in (0.5, 1.0):
@@ -286,6 +295,13 @@ class ReflexController:
                                       world.cell, world.shape)
         stranded = ~world.chassis_passable[world.chassis, iy0, ix0]
         blocked &= ~stranded
+        # Airborne clearance replaces the ground footprint check, but the safety
+        # floor still contains every chassis inside the map.
+        blocked &= ~world.airborne
+        nx, ny = world.pos[:, 0] + step * ca, world.pos[:, 1] + step * cb
+        blocked |= ((nx < world.radius) | (ny < world.radius)
+                    | (nx > world.scn.map.width_m - world.radius)
+                    | (ny > world.scn.map.height_m - world.radius))
 
         self.blocked_count += int(blocked.sum())
         self.stranded_count = int(stranded.sum())

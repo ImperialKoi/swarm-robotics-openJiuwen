@@ -134,8 +134,8 @@ relays, a value function that clips to zero — is what limits it.
 
 ## Standing decisions
 
-- **The demo plays four maps, 42–45, and everything for it trains and gates on those**
-  (`demo.yaml` `demo_seeds`). A policy tuned on them is a policy *for them* -- run 2 of
+- **The demo plays four maps, 42–45, and everything for it trains and gates on those** (owner,
+  `demo.yaml` `demo_seeds`). A policy tuned on them is a policy *for them* -- run 2 of
   the commander is the record of how far that can be from generalising. Describe it that way.
 - **Bound an action before training it.** Contact inspection was dropped when a ground-truth
   oracle for it moved rescues +0.5 (run 4). The detector (M-74) is the case where the flat sweep

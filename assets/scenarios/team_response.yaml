@@ -3,7 +3,7 @@ goal: Search the disaster zone, prioritize confirmed rescue work, and adapt to o
 interval_s: 20.0
 deadline_s: 20.0
 max_age_s: 20.0
-call_timeout_s: 5.0
+call_timeout_s: 8.0  # native task context; total episode deadline stays 20 s
 max_tokens: 120
 token_budget: 9000
 max_candidates: 8

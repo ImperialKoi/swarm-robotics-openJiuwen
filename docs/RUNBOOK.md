@@ -1,11 +1,11 @@
 # RUNBOOK — demo day
 
-**Current build:** use [MULTI_AGENT_DEMO.md](MULTI_AGENT_DEMO.md) for the current
+**Update:** use [MULTI_AGENT_DEMO.md](MULTI_AGENT_DEMO.md) for the current
 build, response-team setup, live disable command and measured limitations. The current
-scenario has 512 robots and **110 casualties**. The earlier timings and scores below
+scenario has 512 robots and **110 casualties**. The timings and scores below
 are historical; they have not been re-established for this scenario or the new team.
 
-Measurement configuration: **after** the scenario rescale — 360 x 240 m, 512 robots, 80 casualties, 96 relays. Anything measured before that rescale does not apply.
+Measured configuration: (D13), **after** the scenario rescale — 360 x 240 m, 512 robots, 80 casualties, 96 relays. Anything measured before that rescale does not apply.
 
 ---
 
@@ -78,24 +78,24 @@ scripted baseline. The demo runs. Do not let a failed model start turn into a sc
 
 ## 3. Historical beat sheet — seed 42, earlier scenario
 
-| clock | beat | operator | what must be on screen |
-|---|---|---|---|
-| **0:00** | Cold open | nothing | Fully fogged map, 512 robots massed at base, HUD `0/80` |
-| **0:00** | First directive | nothing | Reasoning feed prints within a tick — Tier 3 runs every 6 s from t=0 |
-| **0:32** | First rescue | nothing | HUD ticks to `1/80`; ticker calls the extraction |
-| **2:15** | First casualty dug out | nothing | `victim_cleared` in the log — the digger lane earning its slot |
-| **1:00–1:30** | Exploration | **click a scout at ~1:30** | Fog peels back. Follow-cam + `last_action_reason`. *"This is Tier 2 — no LLM in this loop."* |
-| **1:30** | **Hazard ignites** | nothing | Fire blooms at C4 and starts drifting |
-| **2:00** | God view | toggle for ~8 s, then back | Bodies lying in the rubble, with pins over them, next to what the swarm actually knows. *The "it doesn't cheat" beat* |
-| **3:00** | Reprioritise | nothing | Reasoning feed abandons the threatened sector; robots retreat out of it |
-| **3:20** | **Scripted failure** | nothing | Particle burst + screen shake. Within 1–3 s: `task_orphaned` → `task_awarded` to a different robot. *The "watch it self-heal" beat* |
-| **Separate check** | Hivemind offline | Start with `--no-hivemind` | Auction still runs. No H toggle is implemented. For live response-team termination, follow the current demo guide. |
-| **3:18** | Sector abandoned | nothing | Tier 3 closes a burning sector; robots there get `retreat` |
-| **4:30** | Fire peaks | nothing | Hazard stops growing at r≈45 m and begins receding |
-| **4:30–7:00** | Endgame | nothing | Swarm reclaims burnt ground; HUD climbs. Ends ~`27/80` |
-| **7:00** | Close | nothing | Final scorecard |
+| beat | operator | what must be on screen |
+|---|---|---|
+| Cold open | nothing | Fully fogged map, 512 robots massed at base, HUD `0/80` |
+| First directive | nothing | Reasoning feed prints within a tick — Tier 3 runs every 6 s from t=0 |
+| First rescue | nothing | HUD ticks to `1/80`; ticker calls the extraction |
+| First casualty dug out | nothing | `victim_cleared` in the log — the digger lane earning its slot |
+| Exploration | **click a scout** | Fog peels back. Follow-cam + `last_action_reason`. *"This is Tier 2 — no LLM in this loop."* |
+| **Hazard ignites** | nothing | Fire blooms at C4 and starts drifting |
+| God view | toggle for ~8 s, then back | Bodies lying in the rubble, with pins over them, next to what the swarm actually knows. *The "it doesn't cheat" beat* |
+| Reprioritise | nothing | Reasoning feed abandons the threatened sector; robots retreat out of it |
+| **Scripted failure** | nothing | Particle burst + screen shake. Within 1–3 s: `task_orphaned` → `task_awarded` to a different robot. *The "watch it self-heal" beat* |
+| Hivemind offline | Start with `--no-hivemind` | Auction still runs. H switches the unit's thermal display; it does not disable the hivemind. For live response-team termination, follow the current demo guide. |
+| Sector abandoned | nothing | Tier 3 closes a burning sector; robots there get `retreat` |
+| Fire peaks | nothing | Hazard stops growing at r≈45 m and begins receding |
+| Endgame | nothing | Swarm reclaims burnt ground; HUD climbs. Ends ~`27/80` |
+| Close | nothing | Final scorecard |
 
-The 3:20 failure is **state-triggered** — first tick where `t ≥ 200` and `rescued ≥ 10` —
+The failure is **state-triggered** — first tick where `t ≥ 200` and `rescued ≥ 10` —
 with a hard fallback at 260 s. On seed 42 the condition is met at exactly 200.0 s.
 
 ---
@@ -164,7 +164,7 @@ difference is renewals — a directive re-sent to hold a position is not a new d
 
 ## 6. Rehearsal checklist
 
-Current preparation:
+Preparation checklist:
 
 - [ ] Run 1 — full 7 minutes, no operator input beyond the four cues above
 - [ ] Run 2 — same, timed against this beat sheet

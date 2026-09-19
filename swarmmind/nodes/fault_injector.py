@@ -33,10 +33,7 @@ class FaultInjector:
             return
         self.fired_at = world.t
         self.victim_robot = world.robot_ids[i]
-        if emit:
-            emit("robot_destroyed",
-                 f"structural collapse destroys {world.robot_ids[i]}",
-                 robot=world.robot_ids[i], pos=tuple(world.pos[i]))
+        # The world emits the death once; Mission drains it into the shared event log.
         world._kill(i, "structural collapse")
 
     def _pick(self, world, ex) -> int:

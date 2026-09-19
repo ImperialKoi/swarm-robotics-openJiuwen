@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Multi-seed before-picture for the relay work, both Tier-3 arms.
+"""Multi-seed before-picture for the D12 relay work, both Tier-3 arms.
 
     uv run python scripts/baseline_sweep.py
     uv run python scripts/baseline_sweep.py --seeds 42 43 44 45 --workers 4
@@ -12,7 +12,7 @@ Why this exists when `diagnose.py` already reports seed 42 in far more detail:
   honestly labelled "promising, not demonstrated". A single before/after pair on seed 42
   would repeat that mistake with a different variable.
 * **The Tier-3 arm is unresolved and must not move underneath the measurement.** M-26
-  had the scripted rung ahead on seed 42; a later build is behind on the same seed
+  (D7) had the scripted rung ahead on seed 42; at D11 it is behind on the same seed
   (16 rescued on / 18 off). Running both arms separates a relay change from a Tier-3
   change instead of confounding them.
 * **The recorded baselines are from another machine.** M-38/M-39's numbers do not
@@ -56,7 +56,7 @@ DEFAULT_SEEDS = (42, 43, 44, 45)
 #: to one reference seed because it varies 25-36 across seeds and a single seed is
 #: deterministic, so the bar can sit close without absorbing noise.
 GATE_DELIVERY_PCT = 55.0
-#: Of 110 casualties. Re-derived twice as the scenario moved: 30 of 120, then 40
+#: Of 110 casualties. Re-derived twice on D13 as the scenario moved: 30 of 120, then 40
 #: of 80, now 55 of 110. Measured ~75 found on seed 42 with Tier 3 off, so the floor keeps
 #: the same ~25% headroom (M-47, M-52). Rescale it whenever `victims.count` changes -- a
 #: discovery floor in absolute casualties is meaningless against a different denominator.

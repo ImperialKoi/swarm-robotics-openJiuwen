@@ -5,7 +5,7 @@ never delete a row -- the trend across days is what tells you whether a change r
 
 ---
 
-## M-1 · Robot-count sweep
+## M-1 · Robot-count sweep · D1
 
 `uv run python scripts/stress.py`, `demo` scenario, seed 42.
 
@@ -53,7 +53,7 @@ coupled scaling rule.
 
 ---
 
-## M-2 · Obstacle density tuning for the scaled map
+## M-2 · Obstacle density tuning for the scaled map · D1
 
 320 x 208 m, cell 1.0 m, `cluster_radius_m: [2.5, 9.0]`, seed 42.
 
@@ -75,7 +75,7 @@ not enough (worst case 160 m) -- a centre zone at (160, 104) was added.
 
 ---
 
-## M-3 · Scaled mission, 512 robots
+## M-3 · Scaled mission, 512 robots · D1
 
 `--scenario demo --seed 42`, full 420 s, D1 wander controller.
 
@@ -90,7 +90,7 @@ should grow before `mission_duration_s` shrinks.**
 
 ---
 
-## M-4 · Distance-field cost
+## M-4 · Distance-field cost · D1 · **blocks D3**
 
 `grid.distance_field` on the demo grid (208 x 320, 43,841 passable cells), 8 random targets.
 
@@ -120,7 +120,7 @@ Together: ~24 x 1.4 ms = 34 ms per cycle, ~3% of budget.
 
 ---
 
-## M-5 · Robot-count sweep, real Tier 1 + Tier 2
+## M-5 · Robot-count sweep, real Tier 1 + Tier 2 · D2
 
 `scripts/stress.py --scenario demo --seconds 150`. Measured through `Mission`, so the
 numbers include flow-field navigation, Tier 1 steering, task execution and allocation --
@@ -152,7 +152,7 @@ thing.** The default is now 150 s.
 
 ---
 
-## M-6 · Mission outcomes with Tier 1 + Tier 2
+## M-6 · Mission outcomes with Tier 1 + Tier 2 · D2
 
 Heuristic allocation, no auction, no hivemind. Seed 42.
 
@@ -175,7 +175,7 @@ Treat these as the **classical baseline** the gate measures against, not as a ta
 
 ---
 
-## M-7 · Perception: cost and detector characteristic
+## M-7 · Perception: cost and detector characteristic · D3
 
 ### Cost, 512 robots, 48 x 48 x 3 frames
 
@@ -237,7 +237,7 @@ classical detector its characteristic errors and gives a CNN something to beat.
 
 ---
 
-## M-8 · Perception wired in, oracle removed
+## M-8 · Perception wired in, oracle removed · D3
 
 `world.py` no longer discovers casualties. The line `seen = dist <= sensor_radius`
 against ground-truth coordinates is gone; discovery now runs
@@ -297,7 +297,7 @@ Wider explores more but rescues less -- more reports means more time investigati
 
 ---
 
-## M-9 · Auction, blackboard, self-healing
+## M-9 · Auction, blackboard, self-healing · D4
 
 **M1 reached.** A full mission allocates, executes and recovers with no LLM in the loop
 -- the hivemind is not implemented at all yet, and nothing is waiting for it.
@@ -349,7 +349,7 @@ following it was the bug. A robot holding a casualty now has its assignment rewr
 
 ---
 
-## M-10 · Dashboard bridge
+## M-10 · Dashboard bridge · D5
 
 Stdlib WebSocket server (`bus/ws_server.py`), no `websockets` dependency. Verified
 against a hand-rolled client: handshake with a checked `Sec-WebSocket-Accept`, all three
@@ -376,7 +376,7 @@ fails the build rather than silently blanking the dashboard on demo day.
 
 ---
 
-## M-11 · 3D world
+## M-11 · 3D world · D5b
 
 The dashboard is now genuinely 3D. **The simulation is not, and should not be**: 512
 robots with 3D physics do not fit this machine, and flow-field navigation, auction
@@ -431,7 +431,7 @@ is slower because near-field splats are large. Godot draws the same scene with r
 
 ---
 
-## M-12 · The dashboard never connected
+## M-12 · The dashboard never connected · D5c
 
 Godot 4.7.2 reported no errors and sat on "waiting for simulator" while the bridge
 happily reported a connected client.
@@ -456,7 +456,7 @@ occ 65 KB decoded), 1 `hello_done`.
 
 ---
 
-## M-13 · Atmosphere
+## M-13 · Atmosphere · D5c
 
 Height-attenuated exponential fog, in the shader rather than through `Environment`
 post-processing -- the GL Compatibility renderer, chosen to keep memory free for the
@@ -475,7 +475,7 @@ offline frames stay a truthful preview of the live dashboard.
 
 ---
 
-## M-14 · Bigger map, and what it cost
+## M-14 · Bigger map, and what it cost · D5d
 
 Map scaled to **480 x 320 m** (2.31x area, 153,600 cells), 768 robots, 120 casualties,
 12 collection points. Obstacle density re-swept to ~0.67 passable at 900 clusters --
@@ -520,7 +520,7 @@ swarm instead of being a hardcoded choice.
 
 ---
 
-## M-15 · Rescue work could not preempt search
+## M-15 · Rescue work could not preempt search · D5d
 
 **This broke self-healing outright, and the M1 test caught it.**
 
@@ -550,7 +550,7 @@ Determinism holds; seed 42 still hashes identically across processes.
 
 ---
 
-## M-16 · Ruins assets imported
+## M-16 · Ruins assets imported · D5d
 
 33 of 56 models from the RuinsGR pack -> `assets/models/ruins/`, 6.9 MB, glTF binary with
 embedded textures. Walls are **1.00 m thick and 6.6 m tall**, which snaps onto the 1 m
@@ -567,7 +567,7 @@ out to prohibit this use, removing the meshes costs a look, not a feature.
 
 ---
 
-## M-17 · Casualty placement bias
+## M-17 · Casualty placement bias · D5d
 
 `demo`, 480 x 320 m, 768 robots, seed 42, full 420 s. Only `victims.distance_weight_exp`
 varies -- placement weight is `distance_to_base ** exp`.
@@ -603,7 +603,7 @@ is worth something, which is precisely the case the hivemind has to make at D7.
 
 ---
 
-## M-18 · Casualties placed where nobody could reach them
+## M-18 · Casualties placed where nobody could reach them · D5e
 
 Placement filtered on `passable & isfinite(dist_from_base)`. That is not sufficient, and
 **17.3% of the cells it accepted on the demo map were unreachable in practice** -- roughly
@@ -640,7 +640,7 @@ confuser still fools the detector.
 
 ---
 
-## M-19 · Asset import
+## M-19 · Asset import · D5e
 
 | pack | source size | imported | models |
 |---|---:|---:|---:|
@@ -665,7 +665,7 @@ meshes are inside the project root, and every `.gltf` sidecar `.bin` and texture
 
 ---
 
-## M-20 · Making the world look like the assets
+## M-20 · Making the world look like the assets · D5f
 
 First render with meshes in was wrong: a field of grey procedural lumps with ruins
 perched on them. The meshes were dressing on the terrain instead of being the structures.
@@ -703,7 +703,7 @@ must stay in step or the previews stop being truthful.
 
 ---
 
-## M-21 · Terrain and the locomotion axis
+## M-21 · Terrain and the locomotion axis · D5g
 
 Added mountains, hills, valleys, rivers and ditches (`sim/terrain.py`), and a third robot
 axis: **chassis** (wheeled / tracked / legged), mixed evenly within every actuator lane.
@@ -765,7 +765,7 @@ and the barrier that bites is water, which stops both equally. Unfinished.
 
 ---
 
-## M-22 · Three chassis that each earn their slot
+## M-22 · Three chassis that each earn their slot · D5h
 
 Tracked was strictly dominated: same reach as wheeled, 18% slower, no reason to build
 one. Fixed by giving each locomotion a barrier only it clears.
@@ -825,7 +825,7 @@ open work, not a finished result.
 
 ---
 
-## M-23 · Why the swarm stopped moving
+## M-23 · Why the swarm stopped moving · D5i
 
 Terrain dropped the mission to 4/120 rescued and 22.1% explored. The instinct was to
 rebalance the scenario. Measuring first showed the scenario was not the problem:
@@ -1446,7 +1446,7 @@ everything else depends on. It is `command=False` until training gives it parame
 beat no commander at all -- the same discipline the gate applies to every other learned
 component.
 
-## M-37 — store-and-forward complete
+## M-37 — store-and-forward, and D10 complete (D10)
 
 ### Comms was the thing upstream of everything
 
@@ -1504,7 +1504,7 @@ Verified rather than assumed -- 2 generations, stop, restart:
             gen 3 best 51.86  (gen-best 46.17, rejected)
             gen 4 best 54.04  <- improved
 
-## M-38 — a second training machine, and the flow field recomputed 20x too often
+## M-38 — a second training machine, and the flow field recomputed 20x too often (D10)
 
 A Windows box (Ryzen 9 7940H, 8 cores / 16 threads, 39 GB, Radeon 780M) was set up as a
 second training machine. Two things came out of it: a baseline that did not say what was
@@ -1593,7 +1593,7 @@ means more (goal, chassis) groups per tick -- exactly the calls that were hoiste
 - **The full test suite is 11m14s on this machine**, not the "seconds" CLAUDE.md claims.
   Unsplit between platform and the suite having grown at D9/D10.
 
-## M-39 — the rescue ceiling is 25%, and the relay chain cannot outrun the frontier
+## M-39 — the rescue ceiling is 25%, and the relay chain cannot outrun the frontier (D11)
 
 `scripts/diagnose.py`, demo, seed 42, 768 robots, 120 casualties, 420 s, evolved roster.
 This re-takes M-34/35/36, whose numbers predate the rotor chassis, store-and-forward
@@ -1684,7 +1684,7 @@ second `robot_destroyed` for the same robot. One death, two events -- the dashbo
 timeline shows that robot dying twice. `scripts/diagnose.py` de-duplicates by robot id;
 the source has not been fixed.
 
-## M-40 — the relay chain builds ahead of the frontier, and the ceiling barely moves
+## M-40 — the relay chain builds ahead of the frontier, and the ceiling barely moves (D12)
 
 M-39 named the mechanism; this is the fix, measured either side of it on four seeds and
 both Tier-3 arms. Read M-39 first — the chain of constraint it establishes,
@@ -1820,7 +1820,7 @@ Every cell is in `runs/sweep_{before,after}.json` — which `runs/` being gitign
 means is local and `make clean` deletes, so the tables above are the record and
 `scripts/baseline_sweep.py --label before` regenerates the files.
 
-## M-41 — the fire burns out: losses halve, rescues unchanged
+## M-41 — the fire burns out: losses halve, rescues unchanged (D12)
 
 The hazard only ever grew: `r(t) = 6.0 + 0.30·(t−90)`, reaching 105 m by mission end.
 Two consequences, one measured long ago and one found by inspecting a live demo run:
@@ -1905,7 +1905,7 @@ the giveaway. Both paths now go through `Mission.scorecard(wall)`, with a regres
 This is the M-25 lesson from the other side: that entry was about a count that overstated
 Tier 3 by 20x, and this one understated it to zero.
 
-## M-42 — the rescue chain: one casualty, one task, and preemption that competes
+## M-42 — the rescue chain: one casualty, one task, and preemption that competes (D12)
 
 Two bugs found by asking why seven casualties lay cleared and uncollected at t=420 (M-41),
 after burn-out had ruled out the fire as the reason for four of them.
@@ -1987,7 +1987,7 @@ helping should be made to a judge on the current numbers.**
 Seed 42 headless (Tier 3 on) hashes `70515ed82a880111`; control arm `57ab6dbf40299f1c`.
 288 tests green.
 
-## M-43 — Tier 3 was aiming the swarm past its own radio horizon
+## M-43 — Tier 3 was aiming the swarm past its own radio horizon (D12)
 
 M-42 left the scripted rung measurably *costing* the mission: 17.00 rescued against 19.50
 with Tier 3 silent, behind on 3 of 4 seeds, and the gap widening as the swarm improved.
@@ -2069,7 +2069,7 @@ merely a wash. The remaining gap is most likely more push-quality problems of th
 kind, not an inert mechanism. Recorded because the expectation was wrong and acting on it
 would have sent the next change in the opposite direction.
 
-## M-44 — "sectors explored" never measured sectors
+## M-44 — "sectors explored" never measured sectors (D12)
 
 A sector audit, prompted by asking whether the sector grid was right. **It is.** On the
 demo map: 48 sectors A1–F8, indices 0–47, `sector_rect` and `sector_of_cell` agree on
@@ -2100,7 +2100,7 @@ invisible.
 It also mattered beyond the label: `training/gate.py` and `training/command/evaluate.py`
 both weight this field in their objectives, and a reader had every reason to take the name
 at face value. Renamed to `ground_explored_frac` across 15 files and relabelled
-`ground explored` on the scorecard, consistent with the contract.
+`ground explored` on the scorecard, before the contract freeze rather than after.
 The dashboard reads `hud.explored` and is unaffected.
 
 **Acceptance test, and it is the inverse of M-38's.** That entry required the seed-42 hash
@@ -2115,7 +2115,7 @@ Identical mission, new digest. Hashes recorded in M-40 through M-43 predate the 
 cannot be compared against runs after it; the scorecard *values* in those entries stand.
 288 tests green.
 
-## M-45 — the gate runs, and its control arm had never been a control
+## M-45 — the gate runs, and its control arm had never been a control (D13)
 
 `make gate` on the **demo** scenario, 10 held-out seeds (101–110), 4 workers, ~50 min.
 First time this has been run end to end; `SHIPPING.md` is generated from it.
@@ -2182,7 +2182,7 @@ is **"we measured it on ten held-out maps and it did not clear the bar, so we re
 unproven rather than claiming it helps."** The tuned model — the rung this was always meant
 to be a baseline for — has still never run against the demo scenario.
 
-## M-46 — the scripted failure was not state-triggered, and the beat sheet had drifted
+## M-46 — the scripted failure was not state-triggered, and the beat sheet had drifted (D13)
 
 `docs/RUNBOOK.md` is written from measured beats rather than from PLAN §4, and measuring
 them found two things the plan asserts that the build had stopped doing.
@@ -2204,21 +2204,21 @@ fallback still covers a run where it is not.
 | | fault fires at |
 |---|---|
 | `min_rescued: 30` | 260.0 s — always the fallback |
-| **`min_rescued: 10`** | **200.0 s — the state trigger, and exactly the 3:20 PLAN §4 asks for** |
+| **`min_rescued: 10`** | **200.0 s — the state trigger described in PLAN §4** |
 
 Cost: 23 → 22 rescued on seed 42, because a carrier is destroyed 60 s earlier. The beat is
 worth one casualty.
 
 ### Measured beats, seed 42, shipping build
 
-| clock | beat |
-|---|---|
-| 0:00 | first directive (Tier 3 runs from t=0.1 s, every 6 s, 70 cycles) |
-| 0:55 | first rescue |
-| **1:30** | hazard ignites — **PLAN §4 says 2:30**, and has since the D5d rescale |
-| 3:20 | scripted failure, state-triggered |
-| 4:30 | hazard peaks at r≈60 m and begins receding |
-| 7:00 | end, 22/120 rescued, 32 found |
+| beat |
+|---|
+| first directive (Tier 3 runs from t=0.1 s, every 6 s, 70 cycles) |
+| first rescue |
+| hazard ignites |
+| scripted failure, state-triggered |
+| hazard peaks at r≈60 m and begins receding |
+| end, 22/120 rescued, 32 found |
 
 `scripts/beats.py` produces this table and reads its parameters from the scenario, so it
 cannot itself go stale. Run it whenever `demo.yaml` changes.
@@ -2229,7 +2229,7 @@ The event feed publishes 70 `directive_issued` messages — one per 6 s cycle �
 scorecard reports 21. Both are right: M-25 separated *decisions* from *renewals*, and the
 scorecard counts decisions. Worth knowing before a judge counts the feed and asks.
 
-## M-47 — half the swarm never left the start line, and the map was too big
+## M-47 — half the swarm never left the start line, and the map was too big (D13)
 
 Three observations off the first live `--demo` run, all correct, and the third one led to
 the largest single improvement the mission has had.
@@ -2326,7 +2326,7 @@ the fire is. Seed 45 is an outlier at 191 of 512 and is not yet explained. Open.
   that section now describes the old map and says so.
 - Every hash and every baseline recorded in M-39 through M-46 is against the old scenario.
 
-## M-48 — three live observations: two were the clock, one was a shimmer
+## M-48 — three live observations: two were the clock, one was a shimmer (D13)
 
 All from watching the rescaled scenario run. None was the bug it looked like, and one
 re-opened a decision made on the old map.
@@ -2399,7 +2399,7 @@ palette. The simulator's state is unchanged and the scorecard is unaffected.
 **Unverified against Godot**, which cannot run in the development environment. It is four
 lines and one constant; set `COMMS_HOLD_S = 0.0` to draw the raw state.
 
-## M-49 — relay range and count, re-swept: 96 again, and the bottleneck has moved
+## M-49 — relay range and count, re-swept: 96 again, and the bottleneck has moved (D13)
 
 "Can we increase the number or range of comms?" Both, measured. M-33 swept *count* on the
 480 × 320 m map with 768 robots and chose 96; that map is gone. *Range* had never been
@@ -2457,7 +2457,7 @@ is aimed at the wrong link (M-39). On this scenario it is now the *right* link �
 levers are carrier count, carry speed, collection-point density, and the mission clock,
 none of which have been swept since the rescale.
 
-## M-50 — the delivery deadline: nothing found after t≈300 is ever rescued
+## M-50 — the delivery deadline: nothing found after t≈300 is ever rescued (D13)
 
 M-49 concluded the binding constraint had moved from discovery to delivery. This is the
 follow-up, and it sharpens that into something actionable — and rules out every obvious
@@ -2549,7 +2549,7 @@ the first two minutes:
 3. **Shrinking the map again** would raise early discovery the way the D13 rescale did.
    That is a scope decision, not a code one.
 
-## M-51 — five things off the dashboard: one hypothesis dead, one demo problem
+## M-51 — five things off the dashboard: one hypothesis dead, one demo problem (D13)
 
 Five observations from watching the rescaled scenario at t=303. All checked; the headline
 is that the endgame is now *empty*, which is the flip side of the rescale that fixed
@@ -2622,7 +2622,7 @@ one to measure first.
 
 ---
 
-## M-53 — the casualty mesh: 919,567 triangles down to 1,801
+## M-53 — the casualty mesh: 919,567 triangles down to 1,801 (D13)
 
 The victims were an inverted red cone. They are now a person lying curled on their side —
 "Curled Up Silence" by bac213tv1, CC-BY-4.0, credited in `godot/assets/ATTRIBUTION.md`.
@@ -2690,7 +2690,7 @@ independent reader and rasterised from four angles at the tint `main.gd` applies
 `.glb` chunk lengths, the accessor bounds and unit normals are asserted on the file that
 actually ships.
 
-## M-53 — six sectors at 0% with robots standing in them
+## M-53 — six sectors at 0% with robots standing in them (D13)
 
 "Make exploration 100%." It sits at ~73–77% of reachable ground, and six sectors on the far
 side of the map finish at **0.0% explored** on seed 42. Four hypotheses, three wrong.
@@ -2781,7 +2781,7 @@ unfixed for chain *direction*. Not attempted here.
 - **A destroyed robot's buffer is dropped** rather than left in `_pending_cells` for the
   rest of the mission. Bookkeeping only — `_store_and_forward` already skipped the dead.
 
-## M-54 — relay chains now aim at unexplored ground, and reach is capped by something else
+## M-54 — relay chains now aim at unexplored ground, and reach is capped by something else (D13)
 
 M-53 ended with a specific claim: chain *direction* comes from the largest frontier
 clusters, the frontier sits at the comms boundary, so the network grows where the swarm
@@ -2839,7 +2839,7 @@ one regression, one small win, one no-op. The chain of reasoning was sound each 
 the measurement disagreed each time, which is the argument for the A/B switch being a
 parameter rather than a rewrite.
 
-## M-55 — the stall detector was killing the relay lane
+## M-55 — the stall detector was killing the relay lane (D13)
 
 M-54 left a narrow question: 65 relays hold reachable posts, stay in contact, walk, and
 two-thirds never arrive. Instrumenting what ends a relay post assignment answers it:
@@ -2909,7 +2909,7 @@ with 512 robots, which took rescues from 15.6% to 40.6% (M-47).
 **A mechanism fix should be justified as a correctness fix from here on, not as a
 performance one**, unless it comes with a measurement showing otherwise.
 
-## M-56 — the swarm covers ground it never examines
+## M-56 — the swarm covers ground it never examines (D13)
 
 Fifteen configurations moved rescues by nothing (M-55). This is why. Seed 42, 110
 casualties, 68 found, 42 never found.
@@ -2982,7 +2982,7 @@ dwell — revisiting, slower sweeps, or a search pattern that spends looking tim
 proportion to how hard a cell is to read — and that any candidate should be measured
 against framed-looks-per-casualty rather than against explored fraction.
 
-## M-57 — the single line upstream of everything, verified independently
+## M-57 — the single line upstream of everything, verified independently (D13)
 
 `POSSIBLE_BUG3.md` (written separately, same day) names a cause I had not found, and it is
 upstream of M-56. Re-instrumented here from scratch rather than taken on trust, and the
@@ -3040,7 +3040,7 @@ flow-field/congestion numbers, a further row — neither has been merged into th
 and the two documents overlap in symptom while differing in named cause. Reconciling them
 is worth doing before either is acted on.
 
-## M-58 — 58% of the tick budget was one accidentally quadratic loop
+## M-58 — 58% of the tick budget was one accidentally quadratic loop (D13)
 
 [POSSIBLE_BUG3.md §8](../POSSIBLE_BUG3.md) reported the demo scenario running at **0.97x
 realtime — 434 s of wall clock for a 420 s mission** — and correctly flagged it as
@@ -3101,7 +3101,7 @@ site it was profiling, and the same pattern sat in a hotter function for five da
 recorded as "we replaced `np.clip` here" invites exactly that; the durable version is a
 grep across the codebase, which is now worth doing for the remaining call sites.
 
-## M-60 — the flow field was routing through walls: +35% rescues
+## M-60 — the flow field was routing through walls: +35% rescues (D13)
 
 [POSSIBLE_BUG2.md](../POSSIBLE_BUG2.md) claimed the coarse navigation grid contains edges
 that do not exist in the world, and that robots routed onto them are held against rock
@@ -3219,7 +3219,7 @@ unlike M-58 this is a deliberate behaviour change.
 
 ---
 
-## M-62 — the terrain was a pancake with scratches on it
+## M-62 — the terrain was a pancake with scratches on it (D13)
 
 Reported plainly: *"the terrain generation is terrible; there should be hills and
 mountains; the rivers should just be straight lines and should be filled with water;
@@ -3367,7 +3367,7 @@ to plan. Any run measured while other missions share the machine reads far lower
 with three of them running); that is contention, not the scenario, and RTF is not a number
 to read off a loaded box.
 
-## M-60a — correction: the terrain changed underneath M-60
+## M-60a — correction: the terrain changed underneath M-60 (D13)
 
 M-60's absolute numbers were measured against a `demo.yaml` that no longer exists. While
 those runs were in flight the scenario was reworked — `hills: 20` added as a mid-scale
@@ -3410,7 +3410,7 @@ Losses rise 65 → 85, which is expected and worth watching: robots that are no 
 against rock actually travel, and travelling robots reach the fire.
 
 
-## M-63 — a smaller, shorter fire; and the fog lag is real but small
+## M-63 — a smaller, shorter fire; and the fog lag is real but small (D13)
 
 Two requests off a live run: make the fire smaller and make it go out faster. Both are
 downstream of M-60 — once robots stopped being held against rock they actually travelled,
@@ -3505,7 +3505,7 @@ the obvious lever and is untested.
 
 ---
 
-## M-64 — the contact rings were 30x overcounted, and one colour
+## M-64 — the contact rings were 30x overcounted, and one colour (D13)
 
 Started from a display complaint — every ring on the dashboard is the same amber — and
 found two faults stacked, the first hiding the second.
@@ -3561,7 +3561,7 @@ Not measured: the frame-size saving, and whether ~30 markers changes anything ab
 Godot's `MultiMeshInstance2D` threshold. Rescue rate is untouched — this is display only.
 
 
-## M-64 — comms gates exploration, and it gates allocation more than reporting
+## M-64 — comms gates exploration, and it gates allocation more than reporting (D13)
 
 Control condition, requested from a live run: force `in_comms` True for every robot after
 every tick, so perception writes straight to the shared map. Not shippable — it deletes
@@ -3613,7 +3613,7 @@ Both numbers are on the scorecard, and they answer to different levers. Anyone t
 while quoting the other will be disappointed.
 
 
-## M-65 — acting on M-64: more relays, more range, and idle relays that roam
+## M-65 — acting on M-64: more relays, more range, and idle relays that roam (D13)
 
 M-64 established that comms gates exploration *and allocation* — an out-of-contact robot
 cannot be given work at all. Three changes follow from it, made together and measured
@@ -3676,7 +3676,7 @@ it is worth re-gating before the hivemind is described to anyone as helping.
 
 ---
 
-## M-66 — particle effects: the dig lane finally has something to show
+## M-66 — particle effects: the dig lane finally has something to show (D13)
 
 Digging was the one stage of the rescue chain with no motion in it. A scoop robot
 clearing a slab and a scoop robot sitting idle are the same 1.4 m box at the same
@@ -3753,7 +3753,7 @@ lighting. Pulverised concrete is much paler than the rubble it comes from, and
 `(0.87, 0.83, 0.74)` separates.
 
 
-## M-66 — five dashboard observations, three fixes, one of them mine to undo
+## M-66 — five dashboard observations, three fixes, one of them mine to undo (D13)
 
 Five things reported off a live run. Measured first; two turned out to be correct
 behaviour, three were real.
@@ -3829,7 +3829,7 @@ casualty nobody has detected.
     rescued 72.25 / 110   found 93.25   explored 94.4%   delivery 77.5%   gate PASS
 
 
-## M-67 — 72 relays walking to the same point, and what removing the pile cost
+## M-67 — 72 relays walking to the same point, and what removing the pile cost (D14)
 
 Reported from a live run: *"there are so many purples, just clumped up here"*, in dark
 ground that was not lighting up. Purple is the antenna lane.
@@ -3888,7 +3888,7 @@ than the rescue count, reverting `roaming_relays` entirely is the measured-best 
 that number, and it is one flag.
 
 
-## M-68 — giving the antenna lane standing orders
+## M-68 — giving the antenna lane standing orders (D14)
 
 M-67 left the relay lane with no role model: it was barred from search work, held a post
 when the auction gave it one, and otherwise ran a patch. Every fix to it had been a patch
@@ -3944,7 +3944,7 @@ Explored % is a *proxy* the swarm was accidentally gaming. `found` and `rescued`
 things it is a proxy for, and both are higher here. Keeping the ladder.
 
 
-## M-69 — "relays are moving posts" is true for the robot and false for the planner
+## M-69 — "relays are moving posts" is true for the robot and false for the planner (D14)
 
 `relay_posts` builds its anchor list from base plus the targets of *assigned* relay tasks,
 and deliberately excludes idle relays (the spawn-wall note in that function). But after
@@ -3974,7 +3974,7 @@ can, because it is the one deciding whether to abandon it — which is what rung
 overlapping the drift, and the sign could flip.
 
 
-## M-70 — rung 0: a relay that is somebody's only link stands still
+## M-70 — rung 0: a relay that is somebody's only link stands still (D14)
 
 M-69 established that the *planner* cannot use a moving relay's position. The robot can,
 because it is the one deciding whether to move. `_relay_orders` gains a rung above every
@@ -4038,7 +4038,7 @@ whether it helps:
   passer-by into a post exactly when someone is depending on it (M-70, +1.25 rescued).
 
 
-## M-71 — a fifth of the swarm was flying blind
+## M-71 — a fifth of the swarm was flying blind (D14)
 
 Reported from a live run: robots standing on dark ground, in contact, and the ground
 staying dark. *"This shouldn't be possible."* It was, for two independent reasons.
@@ -4106,7 +4106,7 @@ on a search it could not affect. **Not a claim, a lead.** Re-run on the held-out
 before anything is decided about `hivemind=True` for the demo.
 
 
-## M-71 — the range trust window gates two things, and only one was reasoned about
+## M-71 — the range trust window gates two things, and only one was reasoned about (D14)
 
 Why casualties are missed, attributed per gate rather than per symptom. M-56 measured
 dwell and named it the lever; this instruments the tracker's own promotion arithmetic
@@ -4187,7 +4187,7 @@ earlier — which M-50 established is the only thing delivery responds to.
 Not shipped: one seed, and 31,813 reports run through an O(detections x reports) merge
 that `DemoSim` must absorb at wall-clock 20 Hz. Worth validating properly before demo day.
 
-## M-72 — every idle robot now has somewhere to be, and four ways to aim one at nowhere
+## M-72 — every idle robot now has somewhere to be, and four ways to aim one at nowhere (D14)
 
 `SkillExecutor.goals()` ended its no-assignment branch with `else: continue` — no goal at
 all. The auction can only employ as many robots as it has tasks and task supply is bounded
@@ -4301,7 +4301,7 @@ nothing else sends a robot home. Wiring the seek into the **idle** path only —
 no task loses nothing by topping up, and never abandons live work for a 400 m walk — gives
 12 recharges a mission.
 
-## M-73 — a third view of one unit, and how close "close" is
+## M-73 — a third view of one unit, and how close "close" is (D15)
 
 `F` toggled between the orbit and the robot's own POV, and nothing in between. The orbit
 at 260 m shows the swarm and cannot show a robot, and the POV shows what the robot sees
@@ -4344,7 +4344,7 @@ over the horizon. The chase pans in the camera's own screen plane, clamped again
 zoom, so the unit can be put off-centre but never dragged out of its own follow camera.
 
 
-## M-74 — the CNN detector: trained, measured, and it does not ship
+## M-74 — the CNN detector: trained, measured, and it does not ship (D15)
 
 The first GPU work of the project, and the fourth component to lose at the gate. Full
 record: `scripts/export_frames.py` → `training/notebooks/detector.ipynb` on a Kaggle T4 →
@@ -4429,7 +4429,7 @@ vectors rather than a network. That is not an accident and it is the honest head
 
 ---
 
-## M-75 — the detector panel moved onto the world, and the terrain got in the way
+## M-75 — the detector panel moved onto the world, and the terrain got in the way (D15)
 
 The sensor inset in the bottom-right corner drew the followed robot's contacts in their
 own little frame: a second, smaller picture of a world the viewer was already looking at,
@@ -4488,7 +4488,7 @@ to be: the boxes are projected through the operator camera, and that camera move
 every frame in chase and on every mouse move in both views. At most `DET_MAX_BOXES` = 24
 boxes, each a rect, four corner ticks and one string.
 
-## M-76 — before training the units: one action with no headroom, one routing bug worth +10% (branch `rl/unit-policy`)
+## M-76 — before training the units: one action with no headroom, one routing bug worth +10% (D16, , branch `rl/unit-policy`)
 
 Question on the table: RL-train the individual units? Measured the actions first, on the M1,
 demo seeds 42-45, Tier 3 off, shipped roster. Shipped baseline for every row:
@@ -4573,7 +4573,7 @@ confirmed contacts (the 33% waiting), plus dark ground and hold, with the defaul
 offered (`control/unit_policy.py`). Bounded against its heuristic on Kaggle before any long
 run (`training/rl/bound.py`), then BC from the heuristic -> PPO (`training/rl/run.py`).
 
-## M-76a — the bound on Kaggle: routing holds on average, not on fresh seeds; staging is flat
+## M-76a — the bound on Kaggle: routing holds on average, not on fresh seeds; staging is flat (D16)
 
 `python -m swarmmind.training.rl.bound`, Kaggle CPU session (4 vCPU), demo scenario, seeds
 42-49, Tier 3 off. 24 missions in 6,281 s: **1,038 s per mission with 4 in parallel, 13.8
@@ -4619,7 +4619,7 @@ blocker **for the demo**, because 42-45 are the demo -- routing is +16, +16, +16
 It stays true as a statement about other maps, and the wording follows it: tuned on, and gated
 on, the four demo maps.
 
-## M-76c — the unit policy, three sessions, gated out at 1.04x
+## M-76c — the unit policy, three sessions, gated out at 1.04x (D18)
 
 98 PPO iterations on the four demo maps, ~33 h of Kaggle CPU, ~390 missions. Bar (routing
 alone, same maps): **1015.24**. Deterministic checks of the policy the demo would run:
@@ -4647,7 +4647,7 @@ immediate and personal, rescue credit is delayed 150-200 s and shared across fou
 policy bought the cheap term of `mission_score` and could not move the expensive one. Staging
 stayed at ~1.2% of decisions throughout -- the policy agreeing with M-76a's bound.
 
-## M-76d — the gate, re-run on the four demo maps
+## M-76d — the gate, re-run on the four demo maps (D18)
 
 `make gate` on Kaggle, scenario `demo`, seeds 42-45, 24 missions. Full report in
 `SHIPPING.md`. Two results that change what can be said, and one gap that has to be closed
@@ -4683,7 +4683,7 @@ routing is adopted -- is unmeasured. Eight missions (two arms, four maps) settle
 adopt routing for the demo without it: two changes that each help alone are exactly the pair
 this file has watched cancel before (M-66 §3, M-72's drift + redundancy).
 
-## M-76e — the configuration the demo actually runs: routing with Tier 3 live
+## M-76e — the configuration the demo actually runs: routing with Tier 3 live (D18)
 
 The gate measures routing with Tier 3 **off** and Tier 3 without routing, so the combination on
 stage was unmeasured. `training.rl.bound --arms tier3 tier3+routing tier3+routing+policy`,
@@ -4711,7 +4711,7 @@ off, ~1.00-1.03x across session 3's checks, and 1.008x for the heuristic it was 
 does buy lower losses again (34.5 against 40.5) and gives back a little discovery (96.75 against
 98.50) -- the same trade the whole programme kept finding. The verdict does not move.
 
-## M-76f — the demo machine disagrees with Kaggle in *sign*, so routing stays off
+## M-76f — the demo machine disagrees with Kaggle in *sign*, so routing stays off (D18)
 
 M-76e adopted zone routing on Kaggle evidence: +9.5 rescued with Tier 3 live, up on 4 of 4.
 Before merging, the same paired comparison was run **on the demo machine**, because that is what
@@ -4963,19 +4963,415 @@ Commander, unit policy and zone routing remain off. The team remains opt-in and
 heuristic/model/custom-runtime modes are labeled separately. Setup instructions,
 scope decisions and precise limits are in [MULTI_AGENT_DEMO.md](MULTI_AGENT_DEMO.md).
 
-## M-80 · Import verification
 
-Verified the copied project in its new working directory with Python 3.12 and the
-locked `dev` and `evo` extras. Calendar-based planning text was removed; simulation
-parameters and recorded numerical results were retained.
+## M-80 — landscape display and actual casualty cover
 
-- `make check`: Ruff clean; **539 passed, 3 skipped in 494.51 s**.
-- Tiny fixture smoke: seed 42, 4/8 rescued, 6/8 found, 77.7% ground explored,
-  1/16 robots lost, 21 directives issued, zero rejected.
-- Scorecard hash: **`86a44954eda1a756`**, matching M-79.
-- Smoke wall time: **16.88 s**, RTF **24.89×**.
-- Rebuilt the Kaggle source bundle from the copied working tree: **103 files**,
-  content SHA-256 prefix **`90bc82e88f0c80af`**.
+The landscape display replaces rectangular platforms with irregular embedded scree,
+forest stands, rock outcrops and damaged houses. River banks gain sediment transitions
+and shared chamfered shore vertices; steep faces gain irregular erosion and rock strata.
+The simulation height, occupancy, water, perception, four demo layouts and policies are
+unchanged. Original geometry is authored in Python and mirrored/exported to Godot.
 
-No training, multi-mission gate, live model or native dashboard run was performed
-for this import verification.
+Buried casualties previously used the same exposed body transform as surface casualties;
+only their pin was lower. They now sit inside a solid rubble core with broken slabs,
+timber and masonry. Cover follows the existing hidden/found → cleared transition,
+not the historical `buried` flag. The model retains a small exposed sleeve, consistent
+with the existing detector raster's visible clue. Pickup still requires actual excavation.
+Normal view only draws piles at confirmed buried contacts; unseen truth requires V/G.
+
+Measured with a construct-only seed-42 demo world (360×240 m, 512 robots, 110 casualties,
+44 buried); these counts are static reference geometry, not GPU timings or live FPS:
+
+| Measurement | Result |
+|---|---:|
+| All-map scenery triangles, full / medium / far | 112,320 / 96,612 / 86,280 |
+| Reference conifers / ruined houses | 300 / 35 |
+| Shared casualty cover mesh | 216 triangles, 648 exported vertices |
+| Cover for all 44 buried casualties | 9,504 triangles, one MultiMesh batch |
+| Terrain Python/native numerical parity tolerance | 3e-6 |
+| Shoreline configurations checked for dry-cell intrusion | All 512 local 3×3 masks |
+
+Offline landscape views and buried/cleared close-ups were inspected. The latter uses a
+copy set to the cleared state, not a measured digging duration. A separate state-machine
+regression proves a carrier cannot pick up a buried casualty until scoop work reduces
+its debris to zero. Geometry tests verify every buried body vertex lies inside the rubble
+core, and the exported mesh exactly matches its Python source. Headless Godot tests
+exercise normal/god visibility, burial and clearance, body transforms, and removal of
+carried/rescued ground bodies.
+
+Native graphical capture was attempted, but the sandboxed launch aborted and automatic
+approval review rejected the unsandboxed launch because its review service quota was
+exhausted. Headless Godot checks ran successfully; no new graphical frame timing, native
+screenshot or live-mission FPS is claimed. Previews and review metadata are under
+`runs/3d/landscape/`; see [terrain rendering](TERRAIN_RENDERING.md).
+
+## M-81 — simulated unit thermal display
+
+`H` enables a display-only thermal view in POV/chase. The existing truth rows supply
+surface positions and burial state; no detector, autonomous decision, contract or
+simulation RNG changes. The position hash varies relative heat between casualties;
+simulation time drives a small shimmer and 5 Hz pixel grain. Hidden/found buried
+casualties use a dim cover signature; cleared casualties use the warmer body mesh;
+carried/rescued casualties disappear from their former ground position.
+
+| Check | Result |
+|---|---|
+| Five targeted Python/native tests | Passed |
+| Full regression suite | 550 passed in 566.91 s; the added depth/RNG test also passed in the five-test targeted rerun |
+| `make check` smoke (`test`, seed 42) | 4/8 rescued, 6/8 found, hash `86a44954eda1a756`; 30.20 s wall time |
+| Sensor gate | 90° cone, 26 m, wall checks at quarter-cell intervals |
+| Opaque foreground at 1 m vs body at 7 m | Body fully occluded in the reference depth buffer |
+| Simulation RNG state before/after rendering | Every stream byte-for-byte unchanged |
+| Graphical runtime | Godot 4.7.2, Compatibility / OpenGL 4.1 Metal, Apple M1 |
+| Native controls/visibility/shader check | `THERMAL_CHECK_OK`; no shader/script errors |
+| Extra display structure | Two shared MultiMeshes and one screen pass; no extra viewport/process |
+
+Inspected normal/exposed/buried reference frames at 640×420 each and a native
+1600×980 dashboard capture. The latter shows both heat levels with an unchanged HUD
+and the simulated-sensor label. Native windowed execution required leaving the sandbox
+after its initial launch aborted. Images: `runs/3d/thermal/comparison.png` and
+`runs/3d/thermal/native.png`. These are isolated visual fixtures, not live-mission FPS
+or evidence of improved autonomous discovery. Intensity is illustrative, not °C;
+buried warmth models a stylised surface signature, not infrared transmission through walls.
+
+Validation: **91 focused terrain/burial/bridge/isolation tests passed**. The full suite
+completed with 545 passing tests and one headless-test assertion failure: the dummy
+renderer does not retain GPU MultiMesh transforms. The test now checks the actual
+body-pose helper used by the dashboard, and the corrected test passed on rerun.
+`make check` with pytest's failed-test selection then passed Ruff, the corrected test,
+and the fixture smoke. Smoke remains **4/8 rescued, 6/8 found**, hash
+**`86a44954eda1a756` unchanged**. The complete run and rerun logs are retained under
+`runs/3d/landscape/`; no native graphical performance claim is made.
+
+## M-82 · Native Leader/Teammate migration
+
+**Owner request:** use WorkSwarm's native leader and teammate system. `--response-team`
+now uses installed **WorkSwarm 0.2.6** `TeamAgentSpec`, `LeaderSpec`, `TeamMemberSpec`,
+`Runner.run_agent_team_streaming`, the scheduled task board, native message delivery,
+logistics teammate and native task reviewer. SwarmFlow's custom `AgentBackend` is no
+longer on this path. M-79 remains a historical SwarmFlow record.
+
+The leader creates a native task assigned to logistics with safety as reviewer.
+Logistics writes its recommendation to the shared task and completes it. Safety uses
+the SDK's reviewer-scoped `VerifyTaskTool`; the native scheduler settles the vote and
+notifies the leader, which must submit the exact verified choice. The independent
+simulator filter and 30-second lease still control effects. Team topology and task
+shape are predefined; this does not demonstrate unrestricted dynamic task discovery.
+
+**Integration fixes:** use the team Runner's native session lifecycle. The scheduled
+reviewer requires an explicit model configuration; the model pool alone did not provide
+one. In-memory SQLite lost updates in concurrent coordination probes; temporary
+file-backed SQLite with small caches completed the same checks. SDK rails compact
+native shared-task records for inference and remove repeated workspace/roster prompt
+announcements. Native scheduling, task ownership, message routing and vote settlement
+remain in the SDK. Stage-specific prompts resolved an observed leader returning prose
+instead of its submission tool; prose is never treated as a vote. A trace-field `kind`
+collision was caught by simulator testing and fixed; actual worker-protocol tests now
+cover native stream records and repeated requests.
+
+**Checks:** `UV_CACHE_DIR=/tmp/swarmmind-uv-cache make check`: lint, **551 tests passed**
+in 550.38 s, unchanged smoke hash **86a44954eda1a756**. The response-team, knowledge-boundary
+and bridge selection passed **65 tests** after isolated native refinements. The installed
+SDK suite passed five cases with deterministic HTTP model responses (revision, veto,
+unauthorized teammate tool, token budget and repeated episode), plus two requests through
+the actual worker subprocess. These tests establish integration behavior, not LLM quality.
+
+**Real inference:** stock local Qwen2.5-1.5B-Instruct Q4_K_M, llama.cpp on loopback,
+context 8192, one slot. No cloud key or inference was used. The SDK's `local-no-secret`
+API-key field is a compatible-client placeholder. A standalone native call over recorded
+observations completed in **14.702 s**, four calls and **2,425 reported tokens**, under
+the 20 s deadline. It produced a reviewed A1/explore order without simulator dispatch.
+
+**Live fixture:** `--demo --scenario test --seed 42 --max-time 80 --response-team`.
+Two native episodes completed in **12.553 s / 2,428 tokens** and **16.639 s / 2,502 tokens**,
+four calls each. A1 and A3 orders passed current-state validation and were applied.
+An A3 auction assignment is recorded as association, not causation. The operator stopped
+the third episode: exactly one fallback acknowledgment, mission continued to t=80 at
+**1.00× realtime**, both accepted leases expired. Stats: **3 episodes, 2 applied,
+0 rejected, 1 fallback**. No live peer revision or veto occurred in this fixture;
+deterministic SDK tests cover those branches. This fixture preceded the final extra
+context reduction and 8 s first-chunk setting described below.
+
+**Timing failures retained:** an early pre-compaction fixture hit the 20 s wall deadline
+after safety review and correctly kept running on scripted fallback. A subsequent
+512-robot seed-42 smoke run also timed out after an early model retry. It completed
+t=70 with **0.78× realtime**, zero native orders applied; it is not a passing native
+application or rescue-uplift result. Final tuning further compacts model inputs from
+the native task board and raises the per-call/first-chunk timeout from **5 to 8 s** to
+avoid premature retries. The overall deadline and maximum result age remain **20 s**.
+The 120 generated-token limit, 9,000 reported-token budget and eight candidates remain.
+
+**Memory scope:** three samples over 31 s around the tiny fixture measured native-worker
+physical footprint **246.3 MB**, target-process total **2,876.1 MB**. Model-process aggregate
+peaked at 1,563.7 MB, simulator at 43.5 MB, existing Godot processes at 1,024 MB. Those Godot
+processes were not launched or visually verified by this check. Swap started at 12,037.8 MB
+and decreased 115 MB. No growth was observed in this short window; this is not a full
+cold-boot residency pass or 512-robot performance evidence. The machine was heavily swapped.
+
+Evidence: [native recordings](../integrations/workswarm/examples/README.md),
+`runs/team/native-verified.jsonl`, `runs/team/native-residency.json`, and the failed
+load-check trace `runs/team/native-seed42-smoke.jsonl`. No matched rescue-performance
+baseline, full 420 s native rehearsal or new Godot visual verification is claimed.
+
+**Final model-format adapter:** another load probe returned prose from the safety
+model and timed out (t=60 mission continued at 0.83× realtime). A direct local HTTP
+probe confirmed `tool_choice="required"` could return prose; the named-function form
+was silently downgraded with a server warning. The latter is also documented in an
+[upstream report](https://github.com/ggml-org/llama.cpp/issues/27217); this report does
+not establish that our template has the same underlying required-tool bug. ChatML
+alone did not enforce tool calls either.
+
+`native_model.py` now registers a small SDK model-client extension. It subclasses the
+SDK's `OpenAIModelClient`, forwards the single authorized tool's argument schema as
+`response_format=json_schema` to local Qwen, validates the actual model JSON and returns
+an SDK `ToolCall`. It never supplies a candidate or vote itself and never executes a
+tool. Native Leader/Teammate execution and task coordination are unchanged. Invalid or
+forged argument fields fail closed. The adapter uses ChatML in the documented tested
+launch command; notes/feedback have a 24-character limit to bound output latency.
+This is a custom local-model format adapter, not the unmodified native model provider.
+
+
+**Final 512-robot native smoke:** `--demo --scenario demo --seed 42 --max-time 65
+--response-team`, with the registered SDK JSON-schema model adapter, ChatML, 8192
+context, 8 s per-call limit and **20 s total deadline**. Native episodes completed in
+**12.429 / 12.704 / 17.064 s**, four model decisions each, **1,781 / 1,790 / 1,748 reported
+tokens**. Three orders applied: B1, B4, A6. In episode three, logistics changed the
+leader's D5 choice to A6; safety voted pass, the native scheduler completed the task,
+and the leader accepted the revised choice. The simulator applied it at t=49.95.
+Subsequent sector task awards are associations, not rescue attribution. The first two
+leases expired; the third was still live at the normal t=65 mission end. A fourth
+request was cancelled by mission shutdown. Stats: **4 episodes, 3 applied, 0 rejected,
+0 fallbacks**. A stop file was created after mission completion, so it is not evidence
+of operator-stop handling; that check is the earlier t=80 fixture.
+
+The run took **91.90 wall-seconds / 0.71× realtime** on the loaded machine. Its partial
+score was 15/110 rescued, 27 found, 0/512 robots lost; no matched baseline was run and
+no rescue-uplift claim follows. This establishes actual native-team application on the
+demo map but leaves smooth full-length presentation performance unverified. Final
+SDK tests passed five deterministic HTTP-model cases plus two worker requests; the
+65 core boundary/protocol tests and lint passed again. The malformed/forged-arguments
+case expects a bounded failure with no submission, not recovery or a fabricated vote.
+
+Final evidence: [native demo-map trace](../integrations/workswarm/examples/native-demo-smoke.md),
+`runs/team/native-shipping.jsonl`. The final model adapter remains an explicit custom
+extension; native Leader/Teammate coordination, shared tasks and verification are the
+installed library's implementation.
+
+## M-83 — casualty placement follows debris and shelter
+
+Casualties were sampled from navigable cells with only a distance bias; burial was
+assigned from the farthest 60%. This left most buried people away from rubble and
+some casualties in shallow water. Placement now uses physical occupancy: burial
+prefers traversable rubble, other covered sites prefer solid-obstacle margins, and
+an exposed minority remains. YAML sets a target covered fraction of 0.85 and a 3 m
+cover radius. The artificial map border does not count as cover. No scenery labels
+or hidden coordinates are passed to the swarm; discovery still uses the existing
+occluded camera and detector.
+
+Construction-only before/after measurements on this M1, using exactly `demo_seeds`.
+Terrain, count (110), buried quota (44), collection keepouts and 14 m spacing are
+retained. The new sites also require dry ground, fine-grid legged access and the
+same edge-aware coarse reachability used by navigation. Habitat/spacing preferences
+may fall back on sparse custom maps, but these safety conditions never relax.
+
+| Seed | Near cover, before → after | Buried on rubble, before → after | Surface near wall, before → after | In water, before → after |
+|---|---:|---:|---:|---:|
+| 42 | 58 → 94 | 8 → 44 | 19 → 50 | 3 → 0 |
+| 43 | 60 → 94 | 8 → 44 | 17 → 50 | 7 → 0 |
+| 44 | 64 → 94 | 10 → 44 | 16 → 50 | 8 → 0 |
+| 45 | 62 → 94 | 9 → 44 | 17 → 50 | 4 → 0 |
+
+Each map now has 44 buried rubble sites, 50 surface sites beside solid obstacles and
+16 exposed sites. Full world construction in this review took 0.836–1.189 s, including
+terrain and robot initialization; this is not a placement-only benchmark. All four
+maps retain the requested 14 m separation without relaxation.
+
+As a limited geometry check, 16 viewpoints were sampled 6 m from each casualty,
+discarding off-map or legged-impassable viewpoints. The existing LOS test blocked
+38/1277, 40/1329, 56/1342 and 59/1261 sightlines after the change, versus 36/1374,
+27/1429, 20/1364 and 29/1431 before. A wall margin does not mean a casualty is
+invisible from every direction. This check measures geometry only, not detector
+recall. Buried sites retain the small visible clue and existing excavation requirement.
+
+Offline 3D buried and sheltered site previews were inspected using `render3d.py`.
+Evidence: `runs/3d/victim_placement/review.json`, `before_after.png` (before left,
+after right; gold buried, red surface), `buried.png`, and `sheltered.png`.
+Regenerate the current placement audit with `uv run python scripts/review_victim_placement.py`.
+Focused world, perception and determinism checks passed, along with all nine new
+placement regressions (cover, access, dry ground, counts, spacing, sparse terrain,
+metric radius and RNG isolation).
+
+Full-suite validation during concurrent flight/rescue edits completed with **594
+passes and one failure**: the terrain assertion loaded before the flight change
+treated airborne rotors as grounded. After that assertion was updated by the flight
+work, its rerun plus placement and determinism checks passed (**13 tests**). Lint and
+the complete `test.yaml` headless smoke also passed: 3/8 rescued, 5/8 found, 79.8%
+explored, hash `7222837e33e1d4e1`. That smoke reflects the combined workspace, not an
+isolated before/after comparison for placement. The full suite was not rerun after
+the concurrent edits; no clean whole-suite result on a frozen final tree is claimed.
+
+This intentionally changes casualty coordinates and historical scorecard hashes.
+Repeatability is preserved, but **historical mission scores and gates describe the
+previous casualty distribution**. No full demo mission, training run, new gate,
+rescue-rate improvement or unseen-map generalization is claimed here. The retained
+unit policy was tuned on the four demo maps and remains off; its earlier margin has
+not been re-measured against these new casualty sites.
+
+## M-84 — rescue execution audit and a steering experiment rejected as a default
+
+Measured against **83686e0**, on this Mac, Python 3.12.14. Concurrent placement (M-83)
+and flight work changed the shared workspace during the audit. Comparisons below use
+isolated source snapshots. The first comparison uses the original scenario/roster;
+the separate combined-build comparison below includes the flight and placement changes.
+Original `test.yaml`
+SHA256: `c1acc11bd126cfc655c168c86a1cc4ed23d4998307b8af52f78067cf6a533b5d`.
+
+### Reproduced faults
+
+- Between auction cycles, `SkillExecutor._candidates` rebuilt delivery goals without
+  the navigation object, caching the closest zone even when it was unreachable.
+- A carrier picking up while idle acquired no extraction assignment. One collecting
+  a different casualty than its assigned extract kept pursuing the original casualty.
+  Both now deliver the casualty actually held, and loaded carriers cannot bid as free.
+- Opportunistic-pickup handling overwrote explicit hazard retreats on the following
+  tick. It now completes the retreat, then resumes delivery.
+- A partially cleared casualty exempted *every* assigned digger from stall release,
+  including robots stranded far from it. The exemption now requires physical reach.
+- Fault injection emitted a destruction event twice. The world now owns that event.
+- Distance fields rejected blocked coarse edges, but both steering implementations
+  ignored those same masks. The optional repair maps the differing direction orders
+  explicitly and checks edge legality in reference and cached steering.
+
+The original regression suite has 27 cases: **24 fail against the original source**, three
+control cases pass. All 27 pass with the fixes (steering repair explicitly enabled
+where it is being tested).
+
+A 28th case covers the concurrent flight changes: an airborne scoop within horizontal
+digging range is not physically excavating and must not receive the working exemption.
+
+Four additional perception regressions bring the suite to **32 cases**. The tracker
+previously resolved a confirmed report through an airborne or disconnected robot;
+both negative cases now leave it pending, while a grounded connected robot still
+resolves it. Separately, skipping camera frames for stationary robots skipped all
+report resolution and expiry, even after buffered observations had arrived. Only frame
+capture/detection is now movement-gated; report bookkeeping and underfoot sensing still
+run. These enforce the perception/comms boundary and are not a rescue-uplift claim.
+
+### Fixture outcomes — seed 42, 420 simulated seconds
+
+| Configuration | Tier 3 | Rescued | Found | Lost | Mean rescue time |
+|---|---|---:|---:|---:|---:|
+| Original | off | 1/8 | 4/8 | 1 | 73.1 s |
+| Execution fixes | off | 1/8 | 4/8 | 1 | 73.1 s |
+| Execution + steering repair | off | 1/8 | 4/8 | 4 | 71.8 s |
+| Original | scripted | 4/8 | 6/8 | 1 | 246.6 s |
+| Execution fixes | scripted | 4/8 | 5/8 | 1 | 207.0 s |
+| Execution + steering repair | scripted | 2/8 | 5/8 | 4 | 160.9 s |
+
+**No rescue-count improvement on the original layout is established.** Execution fixes preserve rescue counts
+in these two fixture arms; scripted discovery falls by one. The steering change is a
+correctness improvement with a worse mission outcome here, so `--edge-steering` is
+**opt-in, off by default**. A faster mean for fewer rescues is not an improvement.
+The fixture is a functional check, not a substitute for the four demo maps.
+
+A static construction of demo seed 42, without running a mission, checked 148,812
+reachable (chassis, collection-point goal, coarse-cell) combinations. The repair
+removed **3,629 blocked steering steps → 0** (wheeled 908, tracked 922, legged 941,
+rotor 858). These are route choices, not rescued people, and the check does not prove
+that a robot's body can follow every coarse path.
+
+No local demo mission, training, gate, live model, or response-team comparison was
+run. Unit policy, commander and zone-routing defaults remain off. A new same-machine
+comparison on demo seeds 42–45 is required after the concurrent changes settle.
+
+Raw fixture records, source/scenario/roster checksums and static steering counts:
+[`runs/rescue_audit/fixture_comparison.json`](../runs/rescue_audit/fixture_comparison.json).
+
+### Combined build — flight and new casualty placement held fixed
+
+A second comparison uses frozen snapshots of the current combined build, `test`
+seed 42, 420 sim-seconds, with steering experimental mode off in every arm. Here
+`test.yaml` SHA256 is `47c1b1d8ce2d2f797f299705faf42a4b1527e4057a7860563ae1b6d97137092f`.
+Do not compare these counts against the previous table's different casualty sites.
+
+| Audit changes | Tier 3 | Rescued | Found | Lost | Scorecard hash |
+|---|---|---:|---:|---:|---|
+| None | off | 3/8 | 3/8 | 5 | `8e7bb841ff60c1ea` |
+| Perception corrections only | off | 2/8 | 2/8 | 5 | `69d12dd9cb8cdc3c` |
+| All default audit fixes | off | 2/8 | 2/8 | 5 | `69d12dd9cb8cdc3c` |
+| None | scripted | 1/8 | 6/8 | 3 | `ae75f1277a107e0f` |
+| Perception corrections only | scripted | 3/8 | 4/8 | 2 | `2e9b29dc80f5b5c2` |
+| All default audit fixes | scripted | 3/8 | 4/8 | 2 | `2e9b29dc80f5b5c2` |
+
+**Mixed result:** +2 rescues with the scripted advisor, −1 with Tier 3 silent.
+The perception-only control produces byte-identical scorecards to the full patch
+in both arms, so the observed count changes on this fixture belong to the sensing
+corrections; the delivery defects are established by targeted regressions, not a
+count gain here. The sensing restriction enforces the ground-camera/comms boundary
+and is retained regardless of score. This is not evidence of demo-map uplift, a
+trained component, or performance on an unseen map.
+
+### Validation
+
+`make check` passed on the frozen combined build: Ruff clean, **607 tests passed**
+(including the 32 rescue regression cases), and the headless fixture completed at
+t=420. Its scorecard hash `2e9b29dc80f5b5c2` exactly matches the prior scripted run.
+All 176 snapshotted source/config files still matched the workspace after the check;
+documentation and measurement artifacts were updated afterward. The
+[check log](../runs/rescue_audit/check.log) and
+[source manifest](../runs/rescue_audit/checked_sources.json) are retained with the results.
+
+## M-85 — rotor flight, terrain clearance and dashboard altitude
+
+The owner requested that flying chassis visibly fly above the ground fleet and climb
+over mountains. Inspection found two independent gaps: `World.airborne` already removed
+collision and rubble drag, but Tier 1 still used ground flow fields, obstacle repulsion
+and the ground wall override; the bridge also omitted flight state, so every rotor model
+was grounded regardless of the simulator's mode.
+
+Flight is now selected before steering. Airborne rotors use direct horizontal guidance,
+open-air bid fields and same-layer separation; map bounds and known-hazard avoidance
+remain active. They land only on dry traversable support, wait for a ground camera
+sample, and cannot dig or recharge aloft. No rotor carrier is introduced. The additive
+`DashboardFlight` contract carries actual airborne flags alongside the unchanged eight
+robot columns. Models, distant markers, follow cameras, culling and picking use that
+state; missing telemetry and disabled units remain grounded.
+
+The custom 2.5D simulator keeps a binary flight layer, with a deterministic display
+altitude envelope over terrain/water. It provides 8 m clearance, includes the body
+footprint and terrain LOD vertices, and limits each horizontal axis to 0.5 rise/run.
+Aircraft therefore climb before a mountain face and remain level above ground traffic.
+This is a kinematic/display representation, not an aerodynamic or 3D physics model.
+
+Measured on this M1, constructing demo seed 42 only (103 rotors, no mission):
+
+| Flight-height cache | Build | Resident array | Sample all 103 rotors |
+|---|---:|---:|---:|
+| Python offline renderer | 9.433 ms | 696,008 bytes | — |
+| Godot initial window scan | 1,412.050 ms | 348,004 bytes | 0.297 ms |
+| Godot linear window maximum | 261.977 ms | 348,004 bytes | 0.307 ms |
+
+The cache is built once per displayed map, then sampled with four lattice lookups.
+The native timing is 100 batches on a loaded development machine; it is not a full
+stack memory or realtime benchmark and introduces no resident process.
+
+Verification includes wall/water/slope/rubble crossings at flight speed; intact ground
+collision and map bounds; first-tick takeoff; unsafe-landing rejection; aircraft/ground
+separation; clearance over a synthetic 30 m cliff at every terrain LOD; Python/Godot
+height parity; actual bridge flags; and native camera, picking, culling and landing checks.
+An additional regression reproduced a disconnected rotor stuck waiting for shared fog
+after its own camera inspection. Flight now recognizes that locally inspected cell while
+keeping the observations buffered until reconnection; the regression passes.
+Offline inspection frames are `runs/flight/above_ground_units.png` and
+`runs/flight/clearance.png`; these are constructed visual fixtures, not mission results.
+
+This intentionally changes rotor routes and mission outcomes. No rescue uplift, new
+training or demo-map performance gate is claimed. Commander, unit policy and zone
+routing remain off; previous gates describe the earlier movement/placement build.
+
+Validation on the combined checkout: `make check` passed lint, **598 tests** (895.64 s
+on the loaded laptop), and the seed-42 fixture smoke. After the final private-inspection
+adjustment, all **25 focused flight, determinism, mission and terrain-safety checks**
+passed as well. The smoke completed t=420 at 18.10× realtime (23.20 wall-seconds),
+with hash `7222837e33e1d4e1`. This is the small `test.yaml` scenario and includes the
+concurrent placement/rescue changes; it is not a demo-map comparison or performance gate.

@@ -43,7 +43,9 @@ func _initialize() -> void:
 	var source := Surface.new()
 	source.setup(PackedFloat32Array(data.height), PackedByteArray(data.occupancy),
 		PackedFloat32Array(data.water), int(data.width), int(data.depth), float(data.cell))
+	source.flight_height_at_world(0.0, 0.0)
 	var result := {
+		"flight_corners": Array(source.flight_corners),
 		"corners": Array(source.corners), "water_corners": Array(source.water_corners),
 		"water_depths": Array(source.water_depths), "minimum": source.minimum,
 		"maximum": source.maximum, "water_xy": [], "colors": [], "normals": [],
@@ -76,7 +78,9 @@ func _initialize() -> void:
     assert "TERRAIN_PARITY_OK" in result.stdout, result.stdout + result.stderr
     assert "SCRIPT ERROR" not in result.stderr, result.stderr
     actual = json.loads((tmp_path / "result.json").read_text())
+    reference.flight_height_at_world(0.0, 0.0)
     expected = {
+        "flight_corners": reference.flight_corners.ravel(),
         "corners": reference.corners.ravel(),
         "water_corners": reference.water_corners.ravel(),
         "water_depths": reference.water_depths.ravel(),

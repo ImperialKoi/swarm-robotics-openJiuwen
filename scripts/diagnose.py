@@ -14,7 +14,7 @@ intervention that skipped a link failed, twice measurably (M-36).
 **Those numbers are stale.** They predate the rotor chassis, store-and-forward (M-37),
 `posts_per_chain` 1 -> 8, and the evolved roster from MAP-Elites run 0. This script
 re-measures every link in one pass so the next change is aimed at whichever one binds
-*now* rather than whichever bound in an earlier build.
+*now* rather than whichever bound at D9.
 
 It reads ground truth deliberately -- it is a diagnostic, not swarm-side code, and
 `scripts/` is outside the `GUARDED` trees in `tests/test_no_ground_truth_leak.py`. Death

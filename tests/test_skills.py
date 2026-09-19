@@ -1,6 +1,6 @@
 """Tier 2 execution invariants.
 
-Every test here corresponds to a bug that actually happened. They are cheap
+Every test here corresponds to a bug that actually happened during D2. They are cheap
 and they each cost real debugging time, so none of them are hypothetical.
 """
 

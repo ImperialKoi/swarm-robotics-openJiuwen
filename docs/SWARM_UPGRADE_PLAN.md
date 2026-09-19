@@ -1,13 +1,15 @@
 # SwarmMind: multi-agent application plan
-
 This records the original proposed build. The implemented application, exact setup,
 rehearsal evidence and remaining limitations are in [MULTI_AGENT_DEMO.md](MULTI_AGENT_DEMO.md).
 The proposal below is retained as planning history, not a new shipping decision.
+The owner subsequently requested native Leader/Teammate coordination; the implementation
+now uses `TeamAgent` with native scheduled tasks and review, replacing the initial
+SwarmFlow runtime path. See [the current implementation](MULTI_AGENT_DEMO.md).
 The supplied prize brief is the requirements source; official framework documentation
 is linked below. Eligibility has not been independently confirmed with the organizer.
 
 **Recommendation:** add a three-agent incident-response team above the existing swarm.
-Use WorkSwarm 0.2.6 if a compatibility spike passes. Keep the application
+Use WorkSwarm 0.2.6 if a 90-minute compatibility spike passes. Keep the application
 adapter independent of that runtime, and preserve the rehearsed simulator as the fallback.
 The deliverable is a working customized application; packaging a reusable Swarm Skill
 comes after the end-to-end scenario works.
@@ -38,8 +40,7 @@ DemoSim share physics. The current local bus is synchronous; the design document
 older description of an asyncio bus does not match `bus/local.py`.
 
 The project already has a strong visual foundation: 15 articulated robot variants,
-streamed terrain, and distance-dependent detail. M-78 records native Godot checks,
-superseding older documentation about Godot being unavailable. Those
+streamed terrain, and distance-dependent detail. M-78 records native Godot checks, superseding older documentation about Godot being unavailable. Those
 measurements used a static fixture, not the full live simulator/model/runtime stack.
 
 Current component status, from code plus the measurement record:
@@ -95,8 +96,8 @@ Sources: [Agent Team](https://github.com/openJiuwen-ai/jiuwenswarm/blob/develop/
 [Swarm Skills](https://github.com/openJiuwen-ai/jiuwenswarm/blob/develop/docs/en/SwarmSkills.md).
 
 **Version to pin:** `workswarm==0.2.6`. PyPI lists Python
-`>=3.11,<3.14`, which includes this project's 3.12.
-[Published wheel](https://pypi.org/project/workswarm/0.2.6/).
+`>=3.11,<3.14`, which includes this project's 3.12. These are separate publication
+dates, not three versions. [Published wheel](https://pypi.org/project/workswarm/0.2.6/).
 
 The installation guide says wheels include frontend assets; normal non-browser use
 does not require Node. It recommends 4 GB RAM, with more for heavier capabilities.
@@ -116,7 +117,7 @@ the installed 0.2.6 package. No framework was installed or run during this resea
 Local-model support does not establish that the existing 1.5B model can reliably drive
 this framework's tool calls, or that it fits the demo's latency budget.
 
-### Framework decision
+### Framework decision, within 90 minutes
 
 Install the pinned wheel in a separate environment during implementation. Prove:
 
@@ -126,7 +127,7 @@ Install the pinned wheel in a separate environment during implementation. Prove:
 3. Structured output, local model connection, restricted tools and cancellation work.
 4. The complete resident stack fits without growing swap or visibly stalling the demo.
 
-If this fails, stop the framework integration. Use a small custom
+If this fails, stop the framework integration at 90 minutes. Use a small custom
 Python coordinator with separate role contexts, typed messages, tool dispatch and
 the same feedback loop. The supplied brief permits other frameworks. Identify this
 honestly as **custom orchestration**, not WorkSwarm. A working team remains mandatory;
@@ -290,16 +291,6 @@ only matched runs justify saying the directive caused an improvement.
 
 ## 5. Build sequence and file boundaries
 
-| Deliverable | Done means |
-|---|---|
-| Baseline and current-build audit | Record commit, actual flags and fixture hash; identify stale judge-facing claims |
-| WorkSwarm spike and runtime decision | Real handoff/tool/review succeeds within machine limits, or switch to custom runner |
-| Observable snapshot, tools, mailbox and provider adapter | Scripted proposals affect the test fixture through the existing filter; bad/stale ones do not |
-| Three roles and bounded feedback | Live specialist evidence changes a reviewed proposal; local-model failure is handled |
-| Trace and full scenario | User goal through verified execution is visible; runtime stop leaves the swarm working |
-| Regression and real-runtime checks | Required tests pass; no privileged input; slow-provider/expiry/fallback behavior verified |
-| Rehearsal, backup recording and submission docs | Complete offline run and accurate narrated artifacts |
-
 Proposed files, with names illustrative until the spike confirms the runtime API:
 
 | Files | Responsibility |
@@ -362,7 +353,7 @@ Packaging alone is not the application.
 - Any claim that the team improves rescue score requires matched before/after evidence
   on the same machine and configuration, using the four demo maps. Compare scripted
   baseline, current single advisor and team with explicit token/wall-time budgets.
-   Without that comparison, claim demonstrated collaboration and
+  If that comparison is unavailable, claim demonstrated collaboration and
   fault handling only; do not invent a rescue uplift or generalization result.
 - Record measurements in a new row of `MEASUREMENTS.md`, including hardware, seeds,
   flags, framework/model versions, token usage, latency, fallback rate and limitations.
@@ -371,7 +362,7 @@ Packaging alone is not the application.
 
 ## 7. Scope cuts and submission
 
-This application's scope excludes new RL/CNN/LLM training, commander tuning, zone-routing
+Do not expand scope into new RL/CNN/LLM training, commander tuning, zone-routing
 adoption, more robots, ROS2/Gazebo, a new 3D interface, framework self-evolution,
 distributed deployment or external data integrations. Existing physics and the four
 demo layouts already supply the meaningful scenario.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Export (camera frame, label grid) pairs to train the CV victim detector.
+"""Export (camera frame, label grid) pairs to train the CV victim detector (D11).
 
     uv run python scripts/export_frames.py                                  # seeds 1-8
     uv run python scripts/export_frames.py --seeds 1 --every 20 --max-frames-per-seed 300

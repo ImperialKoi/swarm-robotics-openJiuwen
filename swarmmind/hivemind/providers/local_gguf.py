@@ -31,7 +31,7 @@ class LocalGGUFProvider:
                  tuned: bool = False) -> None:
         # The contract distinguishes the fine-tuned model from the base one, and so must
         # the scorecard: "the hivemind worked" means nothing if we cannot say which model
-        # was answering. The gate decides which GGUF actually ships.
+        # was answering. The gate (D12) decides which GGUF actually ships.
         self.name = "tuned-local" if tuned else "base-local"
         self.url = url
         self.model = model

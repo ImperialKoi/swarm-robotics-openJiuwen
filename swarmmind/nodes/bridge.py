@@ -36,9 +36,10 @@ import base64
 import numpy as np
 
 from ..contracts import topics
+from ..contracts.schemas import DashboardFlight
 from ..contracts.version import SCHEMA_VERSION
 from ..perception.raster import AppearanceRaster
-from ..sim.robot import LANES
+from ..sim.robot import CHASSIS_INDEX, LANES
 from ..sim.world import CARRIED, CLEARED, RESCUED
 from ..viz import png
 
@@ -209,6 +210,9 @@ class BridgeNode:
             "tick": world.tick,
             "time": round(world.t, 2),
             "r": r.tolist(),
+            "flight": DashboardFlight(airborne=(
+                world.airborne & alive & (world.chassis == CHASSIS_INDEX["rotor"])
+            ).tolist()).model_dump(),
             "sec": sec.tolist(),
             "hud": {
                 "rescued": world.victims_rescued,

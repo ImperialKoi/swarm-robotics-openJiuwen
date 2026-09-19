@@ -115,11 +115,11 @@ def test_training_seeds_are_disjoint_from_the_gate():
     try:
         from swarmmind.training import gate
     except ImportError:
-        pytest.skip("training.gate does not exist yet")
+        pytest.skip("training.gate does not exist yet (D10)")
 
     held_out = getattr(gate, "HELD_OUT_SEEDS", None)
     if held_out is None:
-        pytest.skip("gate.HELD_OUT_SEEDS not defined yet")
+        pytest.skip("gate.HELD_OUT_SEEDS not defined yet (D10)")
     assert not set(TRAIN_SEEDS) & set(held_out)
 
 

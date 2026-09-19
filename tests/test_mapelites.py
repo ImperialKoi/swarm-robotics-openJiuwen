@@ -259,7 +259,7 @@ def test_the_roster_round_trips_through_yaml(tmp_path):
 
 
 def test_no_archive_means_the_hand_set_archetypes_exactly(tmp_path):
-    """Classical behaviour must be preserved bit for bit when no roster file exists.
+    """Pre-D9 behaviour must be preserved bit for bit when no roster file exists.
 
     The archetypes are the gate's baseline. If loading an absent roster perturbed the
     swarm even slightly, every comparison against "the classical baseline" would be
