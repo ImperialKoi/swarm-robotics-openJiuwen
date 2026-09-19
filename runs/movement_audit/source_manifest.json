@@ -1,0 +1,21 @@
+{
+  "godot/scripts/terrain_surface.gd": "489cd49817446105c3f696ef059c25413e7277ffc3d836fba610bb639687ce50",
+  "godot/shaders/water.gdshader": "4c12cf6efaa78b1664ac64b464def2d76226f3d0e8766991e7c600b5be785b37",
+  "swarmmind/control/planner.py": "7961a8c374f61e6abee4e26fed1686fd73dd32fcf980c0dd3eb28407bcc7fb8e",
+  "swarmmind/control/recovery.py": "e5d69e3e55b0bfd53f8d73a90497e9ded7c33f0f8a260ee0d9033fd1161914aa",
+  "swarmmind/control/tier1_reflex.py": "12911213b19f794f72bc52aa0fa5408f96224828964a317b6ff455f30503ea1a",
+  "swarmmind/control/zone_routing.py": "5fee8a7fdabf003b98c0f9af9547a898ba761bd238555ee507446a1c75d9a393",
+  "swarmmind/hivemind/team/native.py": "21bddada01183fb1855ca3171b10e37a858a9e4c16df3def33d29b4199d19f3e",
+  "swarmmind/hivemind/team/observations.py": "19dbf9f7f07097f0291a2fbe52219c1b1859db45acfbbb7a9f004873ab2f5e55",
+  "swarmmind/mission.py": "f47ada9a5debbe2d3b109f49d2d2abb36bccc6a2c7496d7803d52f61bc6d7ac1",
+  "swarmmind/nodes/auction.py": "c09fbe3513dd9a8292e6631869f806f20db15abb3a081e86b94b51672170a237",
+  "swarmmind/nodes/skill_executor.py": "bda7c63b69a250c95dc87ac4546f933d2ad390d835bcf57b00e8a75902ac81fe",
+  "swarmmind/nodes/tasks.py": "bb53a09e4a527efcb313e7d6b055d6555519b1dfae2ae7057e996930e6cc23d8",
+  "swarmmind/sim/world.py": "21f4c11dff9c3d13f86166979e676b4186032e6f41199c21b5c3be344188f9e7",
+  "swarmmind/viz/terrain_surface.py": "ace17c4ecec4a2fdaba36f3b36691db7e4cd9ccfe4e0bd81bfaa1a27cf334bae",
+  "swarmmind/viz/water.py": "b87b5f4be28c6557b5723b80125a816e9ace3956489d1487d39631a6becd519d",
+  "tests/test_movement_recovery.py": "21fc75e6cd09377724bcbeba4d4f79b4bc3bbfed816337b3874f6fff4708ea74",
+  "tests/test_response_team.py": "914113f9286052aac920be8399f3b6e42725af5f0ba357b153fed31bc35cc0b8",
+  "tests/test_skills.py": "7b6daff48e24c025cccba6c61936eef93166f6a1bb646aaabb8c1d4a514bf7e5",
+  "tests/test_terrain_surface.py": "67593f35d46c66c91fe2d5dafb9f4ea14d9f59bc63fbd0d3a0480c063f4457b2"
+}

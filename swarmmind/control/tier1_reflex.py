@@ -20,6 +20,7 @@ import numpy as np
 
 from ..sim import grid
 from ..sim.robot import AIRBORNE_SPEED, CHASSIS_INDEX, OUT_OF_COMMS
+from .recovery import PROGRESS_METRES, STALL_SECONDS, RecoveryFields
 
 #: Body-relative ray directions for local obstacle probing, fixed order.
 _RAYS = np.linspace(-np.pi, np.pi, 8, endpoint=False, dtype=np.float64)
@@ -76,6 +77,12 @@ class ReflexController:
         self._spacing = None
         self.last_arrived = np.zeros(n, dtype=bool)
         self.blocked_count = 0   # diagnostic: how often the hard override fired
+        self._progress_pos = world.pos.copy()
+        self._progress_at = np.full(n, world.t)
+        self._previous_goals = np.full((n, 2), np.nan)
+        self.recovering = np.zeros(n, dtype=bool)
+        self._recovery_valid = np.zeros(n, dtype=bool)
+        self.recovery_fields = None
 
     # ------------------------------------------------------------------ main entry
 
@@ -100,9 +107,15 @@ class ReflexController:
         alive = world.status <= OUT_OF_COMMS
         world.airborne &= alive & (world.chassis == CHASSIS_INDEX["rotor"])
 
+        self._check_progress(world, goal_xy, goal_id, stop_radius)
         self._goal_directions(world, nav, goal_xy, goal_id)
         self._obstacle_repulsion(world)
         self._separation(world)
+
+        # A checked fine route must be able to leave a repulsion equilibrium.
+        # Retain lateral avoidance and the unmodified swept-circle safety floor.
+        oppose = np.minimum(np.sum(self._rep * self._dir, axis=1), 0.0)
+        self._rep -= (oppose * self._recovery_valid)[:, None] * self._dir
 
         desired = (p.w_goal * self._dir + p.w_obstacle * self._rep
                    + p.w_separation * self._sep + p.w_hazard * self._haz)
@@ -135,8 +148,25 @@ class ReflexController:
 
     # ------------------------------------------------------------------ terms
 
+    def _check_progress(self, world, goal_xy, goal_id, stop_radius):
+        goals = np.full((world.n, 2), np.nan)
+        has = goal_id >= 0
+        if goal_xy:
+            goals[has] = np.asarray(goal_xy)[goal_id[has]]
+        changed = ~np.all(goals == self._previous_goals, axis=1)
+        moved = np.linalg.norm(world.pos - self._progress_pos, axis=1) >= PROGRESS_METRES
+        arrived = self.arrived_at_goals(world, goal_xy, goal_id, stop_radius)
+        reset = changed | arrived | ~has | world.airborne | (world.status > OUT_OF_COMMS)
+        checkpoint = reset | moved
+        self._progress_pos[checkpoint] = world.pos[checkpoint]
+        self._progress_at[checkpoint] = world.t
+        self.recovering[reset] = False
+        self.recovering |= ~reset & (world.t - self._progress_at >= STALL_SECONDS)
+        self._previous_goals = goals
+
     def _goal_directions(self, world, nav, goal_xy, goal_id) -> None:
         self._dir[:] = 0.0
+        self._recovery_valid[:] = False
         if not goal_xy:
             return
         # Grouped by (goal, chassis): a flow field built on one locomotion's passability
@@ -155,7 +185,7 @@ class ReflexController:
                 if not m.any():
                     continue
                 d = nav.descend_to(c, gx, gy, world.pos[m, 0], world.pos[m, 1])
-            # On the goal's own coarse cell the field is flat, so steer straight at it.
+                # On the goal's own coarse cell the field is flat, steer at it.
                 flat = (np.abs(d).sum(axis=1) == 0.0)
                 if flat.any():
                     idx = np.nonzero(m)[0][flat]
@@ -163,6 +193,15 @@ class ReflexController:
                     nrm = np.linalg.norm(delta, axis=1, keepdims=True)
                     d[flat] = np.divide(delta, np.maximum(nrm, 1e-9))
                 self._dir[m] = d
+                stuck = m & self.recovering
+                if stuck.any():
+                    if self.recovery_fields is None:
+                        self.recovery_fields = RecoveryFields(world, nav)
+                    fine, ok = self.recovery_fields.directions(
+                        world, c, (gx, gy), world.pos[stuck])
+                    idx = np.flatnonzero(stuck)[ok]
+                    self._dir[idx] = fine[ok]
+                    self._recovery_valid[idx] = True
 
     def _obstacle_repulsion(self, world) -> None:
         """Two rings of 8 body-relative probes. Pushes away from blocked directions."""

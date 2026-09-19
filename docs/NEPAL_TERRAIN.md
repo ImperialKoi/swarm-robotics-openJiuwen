@@ -39,6 +39,18 @@ building/forest prop selection. Godot uses the checked-in display copy at
 prevents drift. The frozen wire protocol is unchanged: the bridge still sends the
 authoritative height, water and occupancy. These display colours never enter perception.
 
+The M-89 water pass rounds the shoreline inward, preserves dry crossings and uses
+channel coordinates for downstream ripples, narrow reflection streaks and broken
+shallow-water foam. `viz/water.py` is the static reference for `water.gdshader`;
+the Python and Godot meshes use the same channel coordinates and shore vertices.
+Before/after river views are in `runs/3d/river_before/` and `runs/3d/river_after/`.
+This is a display change; it does not alter water depth, traversability or perception.
+
+Spawn placement now repairs dry/body-clearance and coarse-reachability violations
+without resampling valid starts or consuming additional RNG draws. Ground units
+must have a route to base on the same grid used for auction bids. M-89 records
+construction checks and small-fixture behavior; a full Nepal rehearsal is still needed.
+
 Regenerate the display copy and review without advancing a mission:
 
 ```bash

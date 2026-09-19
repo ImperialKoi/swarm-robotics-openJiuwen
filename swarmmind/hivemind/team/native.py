@@ -103,7 +103,10 @@ class NativeEpisode:
         return {
             "snapshot": self.snapshot["id"], "goal": self.config.goal,
             "choices": [{"index": i, "directive": c["directive"],
-                         "connected": c["observed"]["connected"], "backlog": c["observed"]["backlog"]}
+                         "connected": c["observed"]["connected"],
+                         "unassigned": c["observed"].get("unassigned", 0),
+                         "carrying": c["observed"].get("carrying", 0),
+                         "backlog": c["observed"]["backlog"]}
                         for i, c in enumerate(self.candidates)],
             "feasible_choices": [i for i, c in enumerate(self.candidates)
                                  if self.tools.check_plan(c["directive"])["ok"]],

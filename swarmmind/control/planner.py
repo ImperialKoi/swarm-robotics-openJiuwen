@@ -376,7 +376,7 @@ def frontier_targets(world, max_targets: int = 48, factor: int = 8) -> list[Fron
     no tie-breaking, and is therefore deterministic. Ties on size break on cell index
     so the ordering is reproducible (CLAUDE.md invariant #5).
     """
-    fm = frontier_mask(world.explored, world.passable)
+    fm = frontier_mask(world.explored, world.passable & (world.water == 0))
     iy, ix = np.nonzero(fm)
     if len(ix) == 0:
         return []
@@ -393,8 +393,12 @@ def frontier_targets(world, max_targets: int = 48, factor: int = 8) -> list[Fron
 
     out = []
     for k in order:
-        cx = (sums_x[k] / counts[k] + 0.5) * world.cell
-        cy = (sums_y[k] / counts[k] + 0.5) * world.cell
-        sec = int(world.sector_of_cell[int(sums_y[k] / counts[k]), int(sums_x[k] / counts[k])])
+        # A centroid of bank cells can lie in the river (or inside a building).
+        # Choose an actual frontier member nearest it instead.
+        members = np.flatnonzero(key == k)
+        pick = members[np.argmin((ix[members] - sums_x[k] / counts[k]) ** 2
+                                 + (iy[members] - sums_y[k] / counts[k]) ** 2)]
+        cx, cy = (ix[pick] + 0.5) * world.cell, (iy[pick] + 0.5) * world.cell
+        sec = int(world.sector_of_cell[iy[pick], ix[pick]])
         out.append(FrontierTarget(pos=(float(cx), float(cy)), size=int(counts[k]), sector=sec))
     return out

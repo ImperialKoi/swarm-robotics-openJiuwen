@@ -484,7 +484,9 @@ class World:
         # apart again. The base sits in a map corner, so roughly a quarter of any disc
         # around it is on-map -- the loop grows the radius until enough *clear* cells
         # actually exist, rather than assuming the disc is usable.
+        from ..control.planner import UNREACHABLE, NavFields
         from ..control.tier1_reflex import ReflexParams
+        from ..control.zone_routing import erode8
 
         sep = ReflexParams().separation_radius
         want_area = n * np.pi * (sep ** 2)          # one separation disc each
@@ -522,7 +524,38 @@ class World:
             pos[who] = np.stack([gx[cy[sel], cx[sel]], gy[cy[sel], cx[sel]]], axis=1)
         # Sub-cell jitter so robots are not perfectly grid-aligned, bounded to stay
         # inside the cell that was verified clear.
-        return pos + rng.uniform(-0.15, 0.15, (n, 2)) * self.cell
+        jitter = rng.uniform(-0.15, 0.15, (n, 2)) * self.cell
+        # Repair only invalid starts, preserving valid placements and the RNG stream.
+        # Fine passability alone admits isolated coarse pockets and bodies straddling
+        # a bank. Ground units need the auction's route to base; aircraft need a pad.
+        pads = []
+        for c in range(self.chassis_passable.shape[0]):
+            available = clear & erode8(self.chassis_passable[c]) & (self.water == 0)
+            if c != CHASSIS_INDEX["rotor"]:
+                nav = NavFields(self.chassis_passable[c], self.cell, NAV_DOWNSAMPLE)
+                reachable = nav.field(*self.scn.base) < UNREACHABLE
+                reachable = np.repeat(np.repeat(reachable, NAV_DOWNSAMPLE, axis=0),
+                                      NAV_DOWNSAMPLE, axis=1)[:self.shape[0], :self.shape[1]]
+                available &= reachable
+            pads.append(available)
+        ix, iy = grid.world_to_cell(*pos.T, self.cell, self.shape)
+        valid = np.asarray(pads)[self.chassis, iy, ix]
+        # Reserve valid original cells before relocating anyone. Shared initial cells
+        # keep the first robot by id; later robots receive their own landing space.
+        first = np.unique(iy * self.shape[1] + ix, return_index=True)[1]
+        unique = np.zeros(n, dtype=bool)
+        unique[first] = True
+        valid &= unique
+        occupied = np.zeros(self.shape, dtype=bool)
+        occupied[iy[valid], ix[valid]] = True
+        for i in np.flatnonzero(~valid):
+            cy, cx = np.nonzero(pads[int(self.chassis[i])] & ~occupied)
+            if not len(cx):
+                raise RuntimeError(f"no reachable dry spawn for {self.robot_ids[i]}")
+            k = np.argmin((gx[cy, cx] - pos[i, 0])**2 + (gy[cy, cx] - pos[i, 1])**2)
+            pos[i] = (gx[cy[k], cx[k]], gy[cy[k], cx[k]])
+            occupied[cy[k], cx[k]] = True
+        return pos + jitter
 
     # ------------------------------------------------------------------ the tick
 

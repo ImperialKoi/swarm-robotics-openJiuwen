@@ -24,6 +24,7 @@ var minimum := 0.0
 var maximum := 0.0
 var corners := PackedFloat32Array()
 var water_xy := PackedVector2Array()
+var water_frame := PackedVector2Array()
 var water_corners := PackedFloat32Array()
 var water_depths := PackedFloat32Array()
 var water := PackedFloat32Array()
@@ -59,6 +60,7 @@ func setup(heights: PackedFloat32Array, occupancy: PackedByteArray,
 	var n := (gw + 1) * (gh + 1)
 	corners.resize(n)
 	water_xy.resize(n)
+	water_frame.resize(n)
 	water_corners.resize(n)
 	water_depths.resize(n)
 	colors.resize(n)
@@ -98,14 +100,15 @@ func setup(heights: PackedFloat32Array, occupancy: PackedByteArray,
 			wet_fraction[i] = wet_count * 0.25
 			var wx := x * cell
 			var wy := y * cell
-			# Shared shore vertices move inward by < a quarter cell. Dry crossings
+			# Shared shore vertices round inward by up to half a cell. Dry crossings
 			# retain their exact wet mask, including at streamed tile boundaries.
 			if wet_count > 0.0 and wet_count < 4.0:
 				if x > 0 and x < gw:
-					wx += (wet_x / wet_count - wx) * 0.44
+					wx += (wet_x / wet_count - wx) * 0.95
 				if y > 0 and y < gh:
-					wy += (wet_y / wet_count - wy) * 0.44
+					wy += (wet_y / wet_count - wy) * 0.95
 			water_xy[i] = Vector2(wx, wy)
+			water_frame[i] = _river_frame(wx, wy, reference) if wet_count > 0.0 else Vector2.ZERO
 	# Irregular erosion affects steep rock only. Read the unmodified lattice throughout
 	# this pass: an in-place gradient would depend on traversal order.
 	var eroded := corners.duplicate()
@@ -442,12 +445,37 @@ func build_mesh(x0: int, y0: int, x1: int, y1: int, stride: int = 1) -> ArrayMes
 	return _make_mesh(vertices, mesh_colors, mesh_normals, uv, indices)
 
 
+func _river_frame(x: float, y: float, reference: Dictionary) -> Vector2:
+	# Display-only coordinates, metres along/across the authored downstream path.
+	var result := Vector2(x * 0.8 + y * 0.6, -x * 0.6 + y * 0.8)
+	var best := INF
+	for channel: Dictionary in reference.get("channels", []):
+		var offset := 0.0
+		var points: Array = channel.points
+		for k in range(points.size() - 1):
+			var a := Vector2(float(points[k][0]), float(points[k][1]))
+			var b := Vector2(float(points[k+1][0]), float(points[k+1][1]))
+			var delta := b - a
+			var length := delta.length()
+			if length < 0.000001:
+				continue
+			var p := Vector2(x, y) - a
+			var u := clampf(p.dot(delta) / (length * length), 0.0, 1.0)
+			var distance := (p - u * delta).length_squared()
+			if distance < best:
+				best = distance
+				result = Vector2(offset + u * length, (p.y * delta.x - p.x * delta.y) / length)
+			offset += length
+	return result
+
+
 func build_water_mesh(x0: int, y0: int, x1: int, y1: int) -> ArrayMesh:
 	# Preserve the exact wet-cell mask at every LOD: no artificial dams or crossings.
 	var vertices := PackedVector3Array()
 	var mesh_colors := PackedColorArray()
 	var mesh_normals := PackedVector3Array()
 	var uv := PackedVector2Array()
+	var flow_uv := PackedVector2Array()
 	var indices := PackedInt32Array()
 	for y in range(y0, y1):
 		for x in range(x0, x1):
@@ -460,19 +488,20 @@ func build_water_mesh(x0: int, y0: int, x1: int, y1: int) -> ArrayMesh:
 				var i: int = cy * (gw + 1) + cx
 				vertices.append(Vector3(water_xy[i].x, water_corners[i], water_xy[i].y))
 				var depth := clampf(water_depths[i] / 0.85, 0.0, 1.0)
-				var color := Color(0.39, 0.52, 0.47).lerp(Color(0.16, 0.33, 0.35), depth)
-				# Animated glints belong to the live shader; Python bakes its still counterpart.
+				var color := Color(0.46, 0.57, 0.48).lerp(Color(0.105, 0.31, 0.32), smoothstep(0.0, 1.0, depth))
+				# Depth in alpha, channel coordinates in UV2. The shader supplies flow.
 				color.a = 0.84 + 0.12 * depth
 				mesh_colors.append(color)
 				mesh_normals.append(Vector3.UP)
 				uv.append(Vector2(water_xy[i].x / (gw * cell), water_xy[i].y / (gh * cell)))
+				flow_uv.append(water_frame[i])
 			indices.append_array([first, first + 2, first + 1, first + 1, first + 2, first + 3])
-	return _make_mesh(vertices, mesh_colors, mesh_normals, uv, indices)
+	return _make_mesh(vertices, mesh_colors, mesh_normals, uv, indices, flow_uv)
 
 
 func _make_mesh(vertices: PackedVector3Array, mesh_colors: PackedColorArray,
 		mesh_normals: PackedVector3Array, uv: PackedVector2Array,
-		indices: PackedInt32Array) -> ArrayMesh:
+		indices: PackedInt32Array, flow_uv: PackedVector2Array = PackedVector2Array()) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	if vertices.is_empty():
 		return mesh
@@ -482,6 +511,8 @@ func _make_mesh(vertices: PackedVector3Array, mesh_colors: PackedColorArray,
 	arrays[Mesh.ARRAY_COLOR] = mesh_colors
 	arrays[Mesh.ARRAY_NORMAL] = mesh_normals
 	arrays[Mesh.ARRAY_TEX_UV] = uv
+	if not flow_uv.is_empty():
+		arrays[Mesh.ARRAY_TEX_UV2] = flow_uv
 	arrays[Mesh.ARRAY_INDEX] = indices
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh

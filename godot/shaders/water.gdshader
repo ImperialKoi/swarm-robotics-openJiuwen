@@ -23,17 +23,21 @@ void vertex() {
 
 void fragment() {
 	float seen = god_view ? 1.0 : texture(fog_tex, world_uv).r;
-	// Restrained moving reflections. Geometry never oscillates across a dry ford.
-	vec2 p = world_position.xz;
-	float phase = dot(p, vec2(0.73, 1.21)) - TIME * 0.65;
-	float cross_wave = sin(dot(p, vec2(0.19, -0.47)) + TIME * 0.23);
-	float filter_width = fwidth(phase);
-	float glint = pow(max(0.0, sin(phase) * cross_wave), 8.0);
-	glint *= 1.0 - smoothstep(0.6, 2.0, filter_width);
-	float shallow = 1.0 - clamp((COLOR.a - 0.84) / 0.12, 0.0, 1.0);
-	float ripple = 0.5 + 0.5 * sin(dot(p, vec2(1.3, 0.8)) - TIME * 0.8);
-	vec3 water_color = COLOR.rgb + vec3(glint * 0.10);
-	water_color = mix(water_color, vec3(0.67, 0.71, 0.61), shallow * ripple * 0.11);
+	// UV2 follows each channel downstream. Geometry and dry crossings stay fixed.
+	float s = UV2.x;
+	float t = UV2.y;
+	float depth = clamp((COLOR.a - 0.84) / 0.12, 0.0, 1.0);
+	float blend = smoothstep(0.0, 1.0, depth);
+	vec3 water_color = mix(vec3(0.46, 0.57, 0.48), vec3(0.105, 0.31, 0.32), blend);
+	float bend = sin(s * 0.17 - TIME * 0.21) * 0.7 + sin(s * 0.071 + t * 0.43) * 0.4;
+	float ribbons = pow(max(0.0, sin(t * 1.9 + bend)), 10.0);
+	float pulse = 0.5 + 0.5 * sin(s * 0.64 - TIME * 1.15 + sin(t * 0.8));
+	float ripple = pow(max(0.0, sin(s * 1.7 - TIME * 2.1 + bend)), 12.0);
+	float detail = 1.0 - smoothstep(0.6, 2.0, max(fwidth(s * 1.7), fwidth(t * 1.9)));
+	float glint = ribbons * (0.025 + 0.075 * pulse) + ripple * 0.035;
+	float foam = pow(1.0 - blend, 3.0) * ribbons * (0.12 + 0.16 * pulse);
+	water_color += vec3(glint * detail);
+	water_color = mix(water_color, vec3(0.78, 0.83, 0.73), foam * detail);
 	vec3 base = water_color * mix(0.26, 1.0, seen);
 	if (show_sectors) {
 		vec4 sec = texture(sector_tex, world_uv);

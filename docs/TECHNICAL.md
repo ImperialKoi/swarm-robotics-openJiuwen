@@ -526,7 +526,18 @@ Step 6 is the safety floor from the original spec. Nothing above Tier 1 can reac
 
 A\* survives in `planner.astar` for single-robot use — tests, debugging, one-off unique goals. It is never called per-robot per-tick.
 
-**Two radii must stay consistent, and both bugs cost real time at D2.** Tier 1 parks a robot within a per-task `stop_radius` of a goal that has been *snapped to the cell grid*; if the world's interaction reach (`REACH_GRAB`, `REACH_DIG`) is smaller than `stop_radius + cell`, carriers park just outside pickup range and nothing is ever rescued. Likewise, task completion must tolerate the snap, or a robot parks in the gap between the two radii and holds the task forever. `tests/test_skills.py::test_interaction_reach_exceeds_stop_radius` asserts the ordering for every scenario.
+**Stalled-route recovery (M-89).** A robot with a goal that makes less than 1 m of
+physical progress for 6 s can request a fine-grid detour in `control/recovery.py`.
+Patches span about 32 m and are shared by chassis, goal and 8 m start block. At most
+one patch is built per tick; the cache holds 64. They prefer clearance-eroded ground,
+forbid diagonal corner cutting, and fall back to raw passability for narrow approaches.
+While a valid detour is active, obstacle repulsion keeps its lateral component;
+hazard avoidance, separation and the final swept-circle override remain active.
+An arrived relay holding its post does not trigger recovery. Loaded carriers retain
+their extraction assignment throughout. The separate `zone_routing` and
+`edge_steering` experimental defaults remain off.
+
+**Two radii must stay consistent, and both bugs cost real time at D2.** Tier 1 parks a robot within a per-task `stop_radius`; interaction reach must exceed it. M-89 preserves the target's actual coordinates instead of rounding cell centres onto a neighbouring river or wall. The older, conservative `stop_radius + cell` interaction and completion margins remain covered by `tests/test_skills.py::test_interaction_reach_exceeds_stop_radius`.
 
 ~~The A\* cost multipliers for `abandoned` sectors and known hazard (`+5.0 ×` / `+2.0 ×`) apply to the flow-field build at D3.~~ **Revised at D7: flow fields do not depend on directives.**
 
@@ -534,10 +545,17 @@ The planned third channel was a routing penalty through abandoned sectors, baked
 
 The alternative — penalising abandoned sectors in Tier 1's own short-range A\* — was rejected for a better reason than cost: **it would make Tier 1 read Tier 3.** The safety floor answering to the strategic layer is precisely the coupling the architecture claims not to have, and the claim is worth more than the routing detour.
 
-So a directive changes behavior through **two** channels, both inside Tier 2, both in `nodes/tasks.py`:
+So a directive changes behavior inside Tier 2 through these channels:
 
 1. **Task supply.** An abandoned sector generates no `explore`, `investigate` or `relay` work; sector priority shifts a task's rank by ∓0.5, which is the auction's first sort key.
 2. **Evacuation.** `abandoned_preemptions()` pulls robots standing in a closed sector onto `retreat`, at heartbeat rate, by the same mechanism the hazard uses. Without it a closed sector stops producing work but keeps the robots already grinding away in it.
+3. **Available effort (M-89).** Idle search chooses a reachable priority sector before
+   a nearer ordinary sector and excludes abandoned ground. The auction can redirect
+   ordinary exploration to high-priority search; delivery, digging, contact inspection
+   and committed relay posts retain precedence. Fallback goals refresh every 2 s and
+   immediately when sector orders change. Leader/team snapshots expose connected
+   assignment, unassigned and carrying counts; these are robot telemetry, not hidden
+   casualty locations.
 
 Robots still route *through* a closed sector if the geometry calls for it. That is correct: the sector is closed to *work*, not to transit, and the hazard override in Tier 1 remains the thing that keeps them out of fire.
 

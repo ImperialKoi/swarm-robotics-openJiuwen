@@ -165,7 +165,10 @@ class AuctionNode:
                                                           "retreat"):
                 pool = free & ~reserved
             i, score = self._best_bidder(world, task, pool)
-            if task.rank <= self.PREEMPT_RANK and not task.backup:
+            tx, ty = grid.world_to_cell(*task.target, world.cell, world.shape)
+            ordered_search = (task.kind == "explore"
+                              and world.sector_priority[world.sector_of_cell[ty, tx]] == 0)
+            if (task.rank <= self.PREEMPT_RANK or ordered_search) and not task.backup:
                 # Preemption *competes*; it is not a last resort. See PREEMPT_RATIO.
                 #
                 # Backups are exempt. A redundant robot on a casualty is insurance
@@ -306,14 +309,25 @@ class AuctionNode:
         cannot act on the ranking (M-15 made that point once already, about a different
         half of the same mechanism).
 
-        Only rescue-tier tasks may preempt, and only against work that ranks worse, so a
-        carrier can be pulled off a frontier for a casualty but never off a casualty for
-        a frontier. Bids are computed exactly as in a normal round.
+        Rescue-tier tasks can preempt worse work; priority search can redirect only
+        lower-priority exploration. Loaded carriers stay committed to delivery.
+        Bids are computed exactly as in a normal round.
         """
         busy = np.zeros(world.n, dtype=bool)
         for i, a in enumerate(ex.assignment):
-            if a is None or world.status[i] > OUT_OF_COMMS or not world.in_comms[i]:
+            if (a is None or world.status[i] > OUT_OF_COMMS or not world.in_comms[i]
+                    or world.carrying[i] >= 0):
                 continue
+            if task.kind == "explore":
+                # New leader search orders can redirect ordinary exploration only.
+                # Delivery, digging, contact inspection and relay posts keep priority.
+                if a.kind != "explore":
+                    continue
+                ax, ay = grid.world_to_cell(*a.target, world.cell, world.shape)
+                tx, ty = grid.world_to_cell(*task.target, world.cell, world.shape)
+                if (world.sector_priority[world.sector_of_cell[ay, ax]]
+                        <= world.sector_priority[world.sector_of_cell[ty, tx]]):
+                    continue
             if RANK.get(a.kind, 99) > task.rank:
                 busy[i] = True
         if not busy.any():

@@ -17,7 +17,7 @@ import numpy as np
 from ..contracts.schemas import ACTIVITY
 from ..control.planner import UNREACHABLE
 from ..sim import grid
-from ..sim.robot import LANE_INDEX, OUT_OF_COMMS
+from ..sim.robot import CHASSIS_INDEX, LANE_INDEX, OUT_OF_COMMS
 from ..sim.world import CARRIED, CLEARED, FOUND, HIDDEN, REACH_DIG, RESCUED
 
 #: A sector this well explored stops attracting idle robots. Not 1.0: the last few
@@ -132,6 +132,9 @@ class SkillExecutor:
         self.reachable_zones = True
         self._carrying = world.carrying.copy()
         self._in_comms = world.in_comms.copy()
+        self._refresh_at = -1e9
+        self._priorities = world.sector_priority.copy()
+        self._abandoned = world.sector_abandoned.copy()
         #: Goals set by the unit policy (`control/unit_policy.py`) for robots with no
         #: auction assignment: `{robot: ((x, y), reason, expires_at)}`. Empty unless a
         #: unit policy is running, in which case every branch that reads it is a no-op and
@@ -206,8 +209,8 @@ class SkillExecutor:
 
         Cached. Rebuilding this walks every robot in Python, which at 512 robots and
         20 Hz is 10k iterations a second inside the tick loop -- exactly what the
-        scaling rules forbid. Goals only change when an assignment changes or a carrier
-        picks up or drops a victim, both of which set the dirty flag.
+        scaling rules forbid. Assignments, payloads and changed orders invalidate the
+        cache immediately; idle fog/link targets also refresh every DARK_REFRESH_S.
         """
         if not np.array_equal(self._carrying, world.carrying):
             self._carrying = world.carrying.copy()
@@ -218,6 +221,16 @@ class SkillExecutor:
         if not np.array_equal(self._in_comms, world.in_comms):
             self._in_comms = world.in_comms.copy()
             self._dirty = True
+        # Unassigned movement is still work: refresh when fog/links move even when
+        # the auction has no new award to invalidate this cache. Orders apply now.
+        orders_changed = (not np.array_equal(self._priorities, world.sector_priority)
+                          or not np.array_equal(self._abandoned, world.sector_abandoned))
+        if orders_changed or world.t >= self._refresh_at:
+            self._dirty = True
+            self._refresh_at = world.t + DARK_REFRESH_S
+            self._priorities = world.sector_priority.copy()
+            self._abandoned = world.sector_abandoned.copy()
+            self._dark_at = -1e9
         if not self._dirty:
             return self._goal_xy, self._goal_id
         self._dirty = False
@@ -326,18 +339,26 @@ class SkillExecutor:
                     # search targets took 13 -> 5 again (M-36) -- so this deliberately
                     # sends many robots at few points.
                     g = tgt
-                    self.reason[i] = "no task, closing on unexplored ground"
+                    tx, ty = _cell(world, tgt)
+                    priority = world.sector_priority[world.sector_of_cell[ty, tx]]
+                    self.reason[i] = (f"following priority search in {_sector(world, tgt)}"
+                                      if priority == 0 else "no task, closing on unexplored ground")
                     self.activity[i] = ACTIVITY["drift"]
                 else:
+                    self.reason[i] = "no reachable search work; awaiting assignment"
                     self.activity[i] = ACTIVITY["idle"]
                     continue
+                if "holding the only link" not in self.reason[i]:
+                    g = _dry_standing_goal(world, i, g, self._reach_labels(world))
             else:
                 self.activity[i] = _activity_of(world, i, a)
                 g = self._goal_for(world, i, a, nav)
             if g is None:
                 continue
-            # Snap to a grid so near-identical goals share one field.
-            key = (round(g[0] / world.cell) * world.cell, round(g[1] / world.cell) * world.cell)
+            # Preserve cell centres and interaction coordinates. Rounding a dry bank
+            # target onto a cell boundary could put it in the neighbouring river.
+            # NavFields already deduplicates distance fields by coarse goal cell.
+            key = (float(g[0]), float(g[1]))
             gi = index.get(key)
             if gi is None:
                 gi = len(goal_xy)
@@ -545,11 +566,13 @@ class SkillExecutor:
         self._dark_pts = {}
 
         pct = np.asarray(world.sector_explored_pct, dtype=float)
-        want = pct < IDLE_EXPLORE_UNTIL
+        want = (pct < IDLE_EXPLORE_UNTIL) & ~world.sector_abandoned
         if not want.any():
             return self._dark_pts
 
-        base_dark = world.passable & ~world.explored
+        # Search stops belong on land. Legged robots may traverse water, but a
+        # river cell is not a useful place to park and survey for ground casualties.
+        base_dark = world.passable & ~world.explored & (world.water == 0) & ~world.hazard_known
         for c in range(len(world.chassis_passable)):
             dark = base_dark & world.chassis_passable[c]
             iy, ix = np.nonzero(dark)
@@ -603,17 +626,23 @@ class SkillExecutor:
         f = NAV_DOWNSAMPLE
         h, w_ = world.shape
         for c in range(len(world.chassis_passable)):
+            if c == CHASSIS_INDEX["rotor"]:
+                # Match NavSet's airspace: disconnected landing sites remain
+                # mutually reachable, including from a rotor currently over water.
+                self._reach[c] = np.zeros(world.shape, dtype=np.int32)
+                continue
             # Labelled on the *coarse* grid, because that is the grid the flow fields are
             # built from. A pocket connected at 1 m resolution can have no route at 4 m,
             # and `World._navigable` records that exact trap for casualty placement.
             ok = grid.downsample(world.chassis_passable[c], f)
+            edges = grid.coarse_edge_masks(world.chassis_passable[c], f)
             lab = np.full(ok.shape, -1, dtype=np.int32)
             nxt = 0
             ys, xs = np.nonzero(ok)
             for y, x in zip(ys, xs, strict=True):
                 if lab[y, x] >= 0:
                     continue
-                lab[grid._flood(ok, (int(x), int(y)))] = nxt
+                lab[np.isfinite(grid.distance_field(ok, (int(x), int(y)), edges))] = nxt
                 nxt += 1
             self._reach[c] = np.repeat(np.repeat(lab, f, axis=0), f, axis=1)[:h, :w_]
         return self._reach
@@ -694,7 +723,8 @@ class SkillExecutor:
         elif a.kind == "investigate":
             self.reason[i] = f"{lane} investigating a contact in {_sector(world, a.target)}"
         elif a.kind == "relay":
-            self.reason[i] = f"{lane} holding relay position in {_sector(world, a.target)}"
+            verb = "holding" if _dist(world.pos[i], a.target) <= 1.5 else "moving to"
+            self.reason[i] = f"{lane} {verb} relay position in {_sector(world, a.target)}"
         elif a.kind == "retreat":
             self.reason[i] = f"{lane} retreating from hazard"
 
@@ -799,7 +829,7 @@ def _relay_orders(world, relays: np.ndarray
     # found** (M-69): the planner cannot trust a position the robot is about to leave.
     # The robot can, because it is the one deciding to leave.
     holding = _load_bearing(world, relays)
-    for i in holding:
+    for i in sorted(holding):
         out[i] = ((float(world.pos[i][0]), float(world.pos[i][1])),
                   "relay: holding the only link a robot has")
     if len(holding):
@@ -937,7 +967,8 @@ def _drift_targets(world, spare: np.ndarray, dark: dict[int, np.ndarray],
     creep = world.scn.comms.relay_radius * 0.8
     is_relay = world.actuator[spare] == LANE_INDEX["antenna"]
     out: dict[int, tuple[float, float]] = {}
-    for c, pts in dark.items():
+    for c in sorted(dark):
+        pts = dark[c]
         rows = np.nonzero(world.chassis[spare] == c)[0]
         if len(rows) == 0 or len(pts) == 0:
             continue
@@ -949,8 +980,16 @@ def _drift_targets(world, spare: np.ndarray, dark: dict[int, np.ndarray],
             lab = reach[c]
             rx, ry = grid.world_to_cell(pos[:, 0], pos[:, 1], world.cell, world.shape)
             px, py = grid.world_to_cell(pts[:, 0], pts[:, 1], world.cell, world.shape)
-            same = lab[ry, rx][:, None] == lab[py, px][None, :]
+            same = ((lab[ry, rx][:, None] == lab[py, px][None, :])
+                    & (lab[ry, rx][:, None] >= 0))
             d = np.where(same, d, np.inf)
+
+        px, py = grid.world_to_cell(pts[:, 0], pts[:, 1], world.cell, world.shape)
+        sectors = world.sector_of_cell[py, px]
+        d[:, world.sector_abandoned[sectors]] = np.inf
+        # A reachable leader priority precedes autonomous proximity preference.
+        priority = np.where(np.isfinite(d), world.sector_priority[sectors], 99)
+        d = np.where(priority == priority.min(axis=1, keepdims=True), d, np.inf)
 
         pick = np.argmin(d, axis=1)
         for k, row in enumerate(rows):
@@ -1028,6 +1067,33 @@ def _nearest_contact(world, i: int) -> tuple[float, float]:
     idx = np.nonzero(linked)[0]
     d2 = ((world.pos[idx] - world.pos[i]) ** 2).sum(axis=1)
     return tuple(world.pos[idx[int(np.argmin(d2))]])
+
+
+def _dry_standing_goal(world, i, goal, reach):
+    """Keep autonomous waiting/relay targets on reachable banks, not in the river.
+
+    A computed midpoint has none of the guarantees of an auction target. Search
+    locally around it; do not redirect a committed assignment or a vital held link.
+    """
+    c = int(world.chassis[i])
+    gx, gy = _cell(world, goal)
+    if world.water[gy, gx] == 0 and world.chassis_passable[c, gy, gx]:
+        return goal
+    radius = max(2, int(np.ceil(world.scn.comms.relay_radius * .5 / world.cell)))
+    x0, x1 = max(0, gx-radius), min(world.shape[1], gx+radius+1)
+    y0, y1 = max(0, gy-radius), min(world.shape[0], gy+radius+1)
+    region = (slice(y0, y1), slice(x0, x1))
+    ok = world.chassis_passable[c][region] & (world.water[region] == 0)
+    ok &= ~world.hazard_known[region] & ~world.sector_abandoned[world.sector_of_cell[region]]
+    rx, ry = _cell(world, world.pos[i])
+    label = reach[c][ry, rx]
+    ok &= (reach[c][region] == label) & (label >= 0)
+    yy, xx = np.nonzero(ok)
+    if not len(xx):
+        return None
+    pts = np.column_stack([xx+x0+.5, yy+y0+.5]) * world.cell
+    pick = np.argmin(np.sum((pts-np.asarray(goal))**2, axis=1))
+    return tuple(pts[pick])
 
 
 def _nearest_zone(world, pos, nav=None, chassis: int = 0) -> tuple[float, float]:

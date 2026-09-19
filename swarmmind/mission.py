@@ -263,6 +263,10 @@ class Mission:
         # Choose the flight layer BEFORE steering, including the first takeoff tick.
         v, omega = self.reflex.commands(w, self.nav, goal_xy, goal_id, stop_r, arrived,
                                         manual)
+        if full:
+            for i in np.flatnonzero(self.reflex.recovering):
+                reason = self.executor.reason[i].removesuffix("; navigating around blocked terrain")
+                self.executor.reason[i] = reason + "; navigating around blocked terrain"
         # A rotor taking a ground camera sample waits for the next sensor pass. It
         # must not crawl through rubble with its landing skids between flights.
         v = np.where(self._rotor & ~air, 0.0, v)

@@ -5573,3 +5573,139 @@ hivemind, mission, determinism, contract and ground-truth boundaries pass, as do
 isolated SDK suite's 5 coordination cases and 2 worker requests; `test.yaml` seed-42 smoke
 hash unchanged at `2e9b29dc80f5b5c2`. The full suite was not re-run clean here because the
 concurrent terrain work in the tree owns part of it.
+
+## M-89 — spawn, orders, river stops and delivery recovery (2026-09-19)
+
+Owner-reported symptoms: clusters at spawn, units waiting in the river, loaded carriers
+not delivering promptly, and a jagged/flat-looking river. Baseline source: `68abb03`.
+Measurements below are from this Mac, Python 3.12, with no hosted-model requests,
+training, gate or full demo mission. This is execution repair and display work.
+
+### Reproduced mechanisms and repairs
+
+- A valid fine-grid spawn cell did not imply a body-clear, dry or coarse-connected
+  starting position. Repair only invalid starts, deterministically, while reserving
+  valid original placements and preserving the robot RNG stream.
+- An idle goal cache could outlive the fog/communications state that produced it.
+  Refresh every 2 s and immediately on changed sector orders. Idle search honours
+  reachable priorities and avoids abandoned ground; high-priority search can redirect
+  ordinary exploration without taking robots off delivery, digging or relay posts.
+- A centroid of bank frontier cells could land in water; rounding a valid bank cell
+  centre could also move its goal into the adjacent river. Choose an actual dry frontier
+  member and retain goal coordinates. Computed idle relay positions seek a dry bank.
+  Component labels now honour fine-derived routing edges and exclude the invalid `-1`
+  component; aircraft can seek dry landing sites across disconnected ground regions.
+- Coarse descent can still trap a robot against fine terrain. After 6 s with less than
+  1 m displacement, Tier 1 requests a shared fine-grid detour over an approximately
+  32 m patch. It builds at most one per tick and caches 64. Routes prefer body clearance,
+  forbid diagonal corner cutting, and retain hazard/separation and swept-circle safety.
+  Loaded carriers keep extraction assignments. Neither historical experimental
+  `zone_routing` nor `edge_steering` is enabled by this change.
+- Leader/team snapshots now include connected assignment and payload counts. Relay
+  narration distinguishes movement from a useful hold, and stalled-route recovery is
+  visible in the robot's reason. No frozen contract or topic changed.
+
+### Construction-only demo check — seed 42
+
+The intermediate execution repair exposed **20 of 512 robots without a usable initial
+search goal**, including 17 on fine-passable cells labelled blocked by coarse navigation.
+After the spawn correction, **512/512 have goals**, shared across 39 target positions;
+**zero goals are wet**. Every ground robot has a finite coarse route to base, every
+spawn passes body landing clearance, all starts are dry, and no two use the same cell.
+These are construction checks with **zero simulation ticks**, not a mission score.
+
+Initial goal construction took **62.8 ms**. Twelve cold recovery queries, including
+coarse field creation, took **4.21–5.73 ms** each. Their cached direction arrays occupied
+12,288 bytes and the four clearance masks 276,480 bytes. The 64-patch limit is about
+64 KiB of direction grids at the demo's 1 m resolution. No new resident process.
+Raw data: [`construction.json`](../runs/movement_audit/construction.json).
+
+### Same-machine fixture comparison — test.yaml, seed 42, 420 s
+
+**The first table below is a superseded diagnostic, retained as history.** Its sampler
+called `executor.goals()` after a tick, refreshing the new time-sensitive goal cache
+ahead of perception/assignment bookkeeping. That can change trajectories. The final
+headless smoke hash exposed the mismatch. These rows describe the instrumented probe,
+not the normal mission; the corrected read-only comparison follows below.
+
+The fixture is small (16 robots, 8 casualties) and does not measure the Nepal crop.
+The source, scenario, seed and tier configuration are fixed within each before/after
+comparison. Wall timings were affected by concurrent checks and are not a throughput
+benchmark. Stationary means moving under 0.1 m over a one-second sample while alive;
+"away from goal" additionally requires an assigned/fallback goal more than 1.5 m away.
+Counts below are summed robot-seconds, not unique robots or causal rescue attribution.
+
+| Tier 3 | Build | Rescued | Found | Lost | Stationary away from goal | Loaded stationary | Wet stationary |
+|---|---|---:|---:|---:|---:|---:|---:|
+| off | before | 2/8 | 2/8 | 5 | 836 | 0 | 721 |
+| off | after | 4/8 | 4/8 | 2 | 317 | 5 | 0 |
+| scripted | before | 3/8 | 4/8 | 2 | 940 | 70 | 350 |
+| scripted | after | 2/8 | 3/8 | 2 | 348 | 7 | 11 |
+
+**The invalid probe appeared mixed:** stationary behavior improves in both arms, but scripted
+rescues fall **3 → 2** and discovery **4 → 3**. The silent arm improves **2 → 4** rescues.
+A faster mean rescue time for fewer rescues is not a rescue-rate improvement. These
+probe results cannot establish a regression or uplift in the normal mission. The new
+spawn constraints and explicit instruction priority alter trajectories; a live Nepal
+rehearsal remains necessary before claiming a better seven-minute rescue result or
+a benefit from the hosted leader.
+
+Scorecard hashes: off `69d12dd9cb8cdc3c` → `8ff234b35824f27e`; scripted
+`2e9b29dc80f5b5c2` → `a13497522a98c6a4`. Raw results:
+[`before_probe.json`](../runs/movement_audit/before_probe.json),
+[`after_probe.json`](../runs/movement_audit/after_probe.json). Corrected reproduction harness:
+[`fixture_compare.py`](../runs/movement_audit/fixture_compare.py), taking a source
+checkout path and output JSON path as arguments. Baseline sources were extracted from
+`68abb03`; both arms use the project's Python 3.12 environment.
+
+### River display and regression coverage
+
+Shared shoreline vertices round inward by up to half a cell, retaining the exact dry
+crossing mask and matching across streamed tiles. Water uses depth-dependent teal/silt
+colours, channel-aligned downstream ripples, reflection ribbons and broken shallow foam.
+`viz/water.py` provides the static shader reference. This adds no textures, processes,
+physics or perception inputs. The offline render precedes the Godot port; views are
+[`before`](../runs/3d/river_before/river.png) and
+[`after`](../runs/3d/river_after/river.png), with camera/timing/fingerprint JSON beside them.
+Live appearance has not been manually rehearsed in the dashboard.
+
+Twelve targeted movement regressions cover goal refresh, priority and assignment
+precedence, dry targets, river-bank relay positions, aircraft crossing, invalid
+components, preemption protection, bounded recovery work, a loaded carrier physically
+escaping a U-shaped pocket and delivering with wall safety active, legitimate relay
+holds, and valid demo spawning. Existing exhaustive shoreline-mask/tile-seam checks
+pass; additional coverage verifies downstream coordinates, animated colour variation,
+and the team's connected-only workload telemetry. Full check record:
+[`check.log`](../runs/movement_audit/check.log).
+
+### Corrected read-only comparison and final validation
+
+The sampler now reads the executor's cached goals from the last control tick and never
+calls methods that can refresh them. The scripted result's hash matches the independent
+`make check` headless smoke exactly, resolving the probe discrepancy above.
+
+| Tier 3 | Build | Rescued | Found | Lost | Stationary away from goal | Loaded stationary | Wet stationary |
+|---|---|---:|---:|---:|---:|---:|---:|
+| off | before | 2/8 | 2/8 | 5 | 810 | 0 | 721 |
+| off | after | 3/8 | 4/8 | 2 | 533 | 12 | 62 |
+| scripted | before | 3/8 | 4/8 | 2 | 931 | 70 | 350 |
+| scripted | after | 4/8 | 4/8 | 3 | 333 | 9 | 47 |
+
+On this fixture, both configurations rescue one additional casualty. Stationary time
+away from goals decreases **34%** with Tier 3 off and **64%** with scripted leadership.
+The scripted arm's loaded stationary time falls **70 → 9 robot-seconds** and wet
+stationary time **350 → 47**. Tradeoffs remain: scripted losses increase **2 → 3**, and
+mean rescue time rises **169.7 → 236.5 s** while rescuing more casualties. These are
+small-fixture observations, not evidence of hosted-leader or Nepal-map performance.
+
+Final hashes: off `9a938f620b49a562`; scripted `a7cb3f81ea18f690`.
+Corrected raw records: [`before.json`](../runs/movement_audit/before.json) and
+[`after.json`](../runs/movement_audit/after.json). Source/test checksums are in
+[`source_manifest.json`](../runs/movement_audit/source_manifest.json).
+
+`make check` passed: Ruff clean, **653 tests passed**, and the headless seed-42 fixture
+completed at t=420 s with **4/8 rescued, 4/8 found**, hash `a7cb3f81ea18f690`.
+The suite reported two existing NumPy empty-slice warnings in the sampled-scenario
+fixture, with no failures. The exact/legacy collection-coordinate compatibility change
+was additionally checked with all five zone-routing tests and Ruff. Safety, determinism,
+Tier-3-off execution, contract and ground-truth-boundary checks remain green.

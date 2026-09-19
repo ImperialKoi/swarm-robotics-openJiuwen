@@ -125,9 +125,10 @@ class ZoneRouting:
         for c in range(len(world.chassis_passable)):
             wide = erode8(world.chassis_passable[c])
             self.dirs.append(direction_grid(wide, fine_field(wide, src)))
-        # Goals arrive snapped to the cell grid by `SkillExecutor.goals`; match that.
+        # Accept exact collection coordinates and older callers' snapped goals.
         self.keys = {(round(float(x) / world.cell) * world.cell,
                       round(float(y) / world.cell) * world.cell) for x, y in zones}
+        self.keys.update((float(x), float(y)) for x, y in zones)
 
     def is_zone(self, gx: float, gy: float) -> bool:
         return (gx, gy) in self.keys

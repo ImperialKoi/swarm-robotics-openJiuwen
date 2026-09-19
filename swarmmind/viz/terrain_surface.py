@@ -13,6 +13,8 @@ from typing import NamedTuple
 
 import numpy as np
 
+from .water import river_frame, surface_color
+
 WALL_LIFT = 1.55
 RUBBLE_LIFT = 1.0
 SMOOTH_PASSES = 2
@@ -108,15 +110,16 @@ class TerrainSurface:
         # Shared water corners use ONLY wet neighbours; dry terrain must not tilt a
         # river into a staircase. A tiny shore clearance avoids coplanar flicker.
         water_level = _region_smooth(recovered + water, wet)
-        # Chamfer shoreline corners into the wet cells by less than a quarter cell.
+        # Round staircase corners inward by up to half a cell.
         # Shared world coordinates keep tile seams closed. No dry cell is flooded.
         cy, cx = np.indices(height.shape)
         mean_x = _corners((cx+.5)*self.cell*wet) / np.maximum(count, 1e-12)
         mean_y = _corners((cy+.5)*self.cell*wet) / np.maximum(count, 1e-12)
         shore = (count > 0) & (count < 1)
-        water_x = wx + np.where(shore & (xx > 0) & (xx < self.gw), (mean_x-wx)*.44, 0)
-        water_y = wy + np.where(shore & (yy > 0) & (yy < self.gh), (mean_y-wy)*.44, 0)
+        water_x = wx + np.where(shore & (xx > 0) & (xx < self.gw), (mean_x-wx)*.95, 0)
+        water_y = wy + np.where(shore & (yy > 0) & (yy < self.gh), (mean_y-wy)*.95, 0)
         self.water_xy = np.stack([water_x, water_y], axis=-1)
+        self.water_frame = river_frame(water_x, water_y, reference)
         self.water_corners = np.maximum(
             _corners(water_level * wet) / np.maximum(count, 1e-12),
             self.height_at_world(water_x, water_y) + .025,
@@ -301,11 +304,7 @@ class TerrainSurface:
         vy = np.stack([yy, yy, yy+1, yy+1], -1)
         vertices = np.concatenate([self.water_xy[vy, vx], self.water_corners[vy, vx, None]], -1).reshape(-1, 3)
         depth = np.clip(self.water_depths[vy, vx].reshape(-1)/.85, 0, 1)
-        rgb = np.array([.39, .52, .47]) + depth[:, None] * np.array([-.23, -.19, -.12])
-        # Static counterpart of the live shader's subtle travelling surface glints.
-        wx, wy = vertices[:, 0], vertices[:, 1]
-        glint = np.maximum(0, np.sin(wx*.73+wy*1.21) * np.sin(wx*.19-wy*.47))**8
-        rgb += glint[:, None]*.065
+        rgb = surface_color(self.water_frame[vy, vx].reshape(-1, 2), depth)
         colors = np.column_stack([rgb, .84+.12*depth])
         ids = (np.arange(len(xx))*4)[:, None]
         triangles = np.concatenate([ids+[0, 1, 2], ids+[1, 3, 2]]).astype(np.int32)

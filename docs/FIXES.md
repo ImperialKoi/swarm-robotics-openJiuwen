@@ -172,6 +172,15 @@ visible.
 
 ## 3. Tier 1 — navigation and the safety floor
 
+**M-89 follow-up on the Nepal crop:** passable spawn centres were not necessarily
+body-clear, dry or connected on the auction's coarse graph. Invalid starts now move
+to the nearest valid unoccupied pad, preserving valid starts and the robot RNG stream.
+Six seconds without physical progress triggers a bounded fine-grid detour; carriers
+keep their delivery task. This addresses local blocked-route equilibria without
+enabling the experimental global zone/edge-steering defaults. See M-89 for the
+small-fixture comparison and the diagnostic-probe correction. These results do not
+establish Nepal mission uplift.
+
 | # | problem | cause | fix | ref |
 |---|---|---|---|---|
 | ⚠️ | Steering crosses an edge rejected by the distance field | descent compared neighbour distances without checking the fine-derived edge mask | mask both reference and cached descent, accounting for their different direction order; **experimental `--edge-steering` only**, because the fixture rescue result regressed | M-84 |
@@ -207,6 +216,15 @@ visible.
 ---
 
 ## 5. Tier 2 — auction, tasks, self-healing
+
+**M-89 execution follow-up:** idle goals now refresh independently of auction awards,
+honour reachable sector priorities and exclude abandoned ground. High-priority search
+may redirect ordinary search, while carrying, digging and relay assignments remain
+protected. Search/relay destinations use actual dry cells, and execution no longer
+rounds bank targets into adjacent water. Ground reachability uses the routing edge
+masks; aircraft use the same open airspace as their navigation. Team observations now
+include connected unassigned/assigned/carrying counts. Narration distinguishes a relay
+travelling to its post from one holding it, and identifies terrain detours.
 
 | # | problem | cause | fix | ref |
 |---|---|---|---|---|

@@ -1,0 +1,50 @@
+[
+  {
+    "tier3": "off",
+    "scorecard": {
+      "seed": 42,
+      "sim_time": 420.0,
+      "victims_rescued": 3,
+      "victims_found": 4,
+      "victims_total": 8,
+      "ground_explored_frac": 0.790367,
+      "robots_lost": 2,
+      "robots_total": 16,
+      "mean_time_to_rescue": 179.15,
+      "energy_used": 8.468561,
+      "directives_issued": 0,
+      "directives_rejected": 0,
+      "wall_seconds": 16.081,
+      "rtf": 26.12
+    },
+    "hash": "9a938f620b49a562",
+    "stationary_away_from_goal_robot_seconds": 533,
+    "loaded_stationary_robot_seconds": 12,
+    "water_stationary_robot_seconds": 62,
+    "recovery_builds": 129
+  },
+  {
+    "tier3": "scripted",
+    "scorecard": {
+      "seed": 42,
+      "sim_time": 420.0,
+      "victims_rescued": 4,
+      "victims_found": 4,
+      "victims_total": 8,
+      "ground_explored_frac": 0.826965,
+      "robots_lost": 3,
+      "robots_total": 16,
+      "mean_time_to_rescue": 236.463,
+      "energy_used": 8.430009,
+      "directives_issued": 17,
+      "directives_rejected": 0,
+      "wall_seconds": 16.321,
+      "rtf": 25.73
+    },
+    "hash": "a7cb3f81ea18f690",
+    "stationary_away_from_goal_robot_seconds": 333,
+    "loaded_stationary_robot_seconds": 9,
+    "water_stationary_robot_seconds": 47,
+    "recovery_builds": 92
+  }
+]

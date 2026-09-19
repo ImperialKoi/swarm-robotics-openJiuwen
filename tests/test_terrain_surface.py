@@ -7,6 +7,7 @@ import pytest
 
 from swarmmind.viz.terrain_surface import CLEARANCE, TerrainSurface
 from swarmmind.viz.units import DIG, REST, build_model, posed_parts, valid_variants
+from swarmmind.viz.water import river_frame, surface_color
 
 
 def _surface(height, cell=1.0):
@@ -171,6 +172,18 @@ def test_chamfered_water_matches_across_streamed_tile_boundaries():
     actual = {tuple(row) for mesh in parts for row in mesh.vertices}
     assert actual == expected
     assert sum(len(mesh.triangles) for mesh in parts) == len(whole.triangles)
+
+
+def test_river_current_coordinates_follow_downstream_bends():
+    layout = {"channels": [{"points": [[0, 0, 3], [10, 0, 2], [10, 10, 1]]}]}
+    frame = river_frame(np.array([2, 8, 10, 10]), np.array([0, 0, 2, 8]), layout)
+    assert np.all(np.diff(frame[:, 0]) > 0)
+    np.testing.assert_allclose(frame[:, 1], 0)
+    depth = np.array([.1, .4, .7, 1.0])
+    first, later = surface_color(frame, depth), surface_color(frame, depth, time=1)
+    assert np.isfinite(first).all() and np.isfinite(later).all()
+    assert (first >= 0).all() and (first <= 1).all()
+    assert not np.array_equal(first, later)
 
 
 def test_coarse_mesh_reduces_geometry_and_skirts_close_perimeter():

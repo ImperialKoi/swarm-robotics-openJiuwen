@@ -39,7 +39,7 @@ def test_observation_is_detached_and_uses_an_explicit_knowledge_boundary(mission
     allowed = {name: getattr(w, name) for name in (
         "in_comms", "status", "pos", "cell", "shape", "sector_of_cell", "sector_ids",
         "_sector_at", "scn", "sector_explored_pct", "sector_hazard_known",
-        "sector_priority", "sector_abandoned", "actuator", "battery", "t",
+        "sector_priority", "sector_abandoned", "actuator", "battery", "carrying", "t",
     )}
     guarded = SimpleNamespace(**allowed)  # any undeclared simulator access fails
     a = capture(guarded, mission.executor, mission.tracker, mission.bus, "fixture")
@@ -56,7 +56,8 @@ def test_disconnected_telemetry_is_not_exported_as_fresh(mission):
     mission.world.in_comms[:] = False
     snap = snapshot(mission)
     assert all(s["connected"] == 0 for s in snap["sectors"])
-    assert all(lane == {"connected": 0, "battery": None} for lane in snap["lanes"].values())
+    assert all(lane == {"connected": 0, "battery": None, "unassigned": 0,
+                        "assigned": 0, "carrying": 0} for lane in snap["lanes"].values())
 
 
 def test_event_allowlist_strips_hidden_text_and_positions():
@@ -64,6 +65,22 @@ def test_event_allowlist_strips_hidden_text_and_positions():
     assert observe_event({"kind": "victim_found", "t": 3, "text": "secret", "pos": [1, 2]}) == {
         "kind": "victim_found", "t": 3,
     }
+
+
+def test_team_sees_connected_assignment_and_payload_counts(mission):
+    from swarmmind.nodes.skill_executor import Assignment
+    from swarmmind.sim.robot import LANES
+
+    w = mission.world
+    w.in_comms[:] = False
+    w.in_comms[0] = True
+    lane = LANES[int(w.actuator[0])]
+    assert snapshot(mission)["lanes"][lane]["unassigned"] == 1
+    mission.executor.assign(w, 0, Assignment("work", "explore", tuple(w.pos[0])))
+    w.carrying[0] = 0  # payload telemetry only; no casualty truth is exported
+    counts = snapshot(mission)["lanes"][lane]
+    assert counts["assigned"] == counts["carrying"] == 1
+    assert counts["unassigned"] == 0
 
 
 def peer_fixture(m):

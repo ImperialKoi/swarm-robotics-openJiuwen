@@ -1,0 +1,40 @@
+{
+  "scenario": "demo",
+  "seed": 42,
+  "simulation_ticks": 0,
+  "map_metres": [
+    320.0,
+    216.0
+  ],
+  "resolution": [
+    1100,
+    750
+  ],
+  "setup_seconds": 0.4336,
+  "views": {
+    "river": {
+      "camera": {
+        "position": [
+          99.64395520083093,
+          74.43596507692655,
+          35.05347303207964
+        ],
+        "target": [
+          137.5,
+          128.5,
+          4.553473032079637
+        ],
+        "horizontal_fov_degrees": 50
+      },
+      "seconds": 1.7148,
+      "visible_terrain_tiles": 27,
+      "terrain_triangles": 58400,
+      "water_triangles": 8662,
+      "tile_strides": {
+        "1": 27
+      }
+    }
+  },
+  "simulation_fingerprint": "8f83b13440adba4e1b521c94a65c914758387058b83a6683c71060e7d026b582",
+  "world_unchanged": true
+}

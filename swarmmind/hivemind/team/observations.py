@@ -19,6 +19,11 @@ def capture(world, executor, tracker, bus, snapshot_id: str) -> dict:
     ix, iy = grid.world_to_cell(world.pos[:, 0], world.pos[:, 1], world.cell, world.shape)
     sectors_at = world.sector_of_cell[iy, ix]
     counts = np.bincount(sectors_at[connected], minlength=len(world.sector_ids))
+    assigned = np.array([a is not None for a in executor.assignment])
+    carrying = world.carrying >= 0
+    spare = connected & ~assigned & ~carrying
+    idle_counts = np.bincount(sectors_at[spare], minlength=len(world.sector_ids))
+    carry_counts = np.bincount(sectors_at[connected & carrying], minlength=len(world.sector_ids))
     contacts = Counter()
     resolved = Counter()
     for r in sorted(tracker.reports, key=lambda r: r.id):
@@ -34,6 +39,7 @@ def capture(world, executor, tracker, bus, snapshot_id: str) -> dict:
         "id": sid, "explored": round(float(world.sector_explored_pct[k]), 3),
         "hazard": round(float(world.sector_hazard_known[k]), 3),
         "connected": int(counts[k]), "contacts": contacts[sid],
+        "unassigned": int(idle_counts[k]), "carrying": int(carry_counts[k]),
         "resolved_reports": resolved[sid], "backlog": dict(sorted(backlog[sid].items())),
         "collection": sid in zones, "priority": int(world.sector_priority[k]),
         "abandoned": bool(world.sector_abandoned[k]),
@@ -42,6 +48,9 @@ def capture(world, executor, tracker, bus, snapshot_id: str) -> dict:
     for k, lane in enumerate(LANES):
         mask = connected & (world.actuator == k)
         lanes[lane] = {"connected": int(mask.sum()),
+                       "unassigned": int((mask & spare).sum()),
+                       "assigned": int((mask & assigned).sum()),
+                       "carrying": int((mask & carrying).sum()),
                        "battery": round(float(world.battery[mask].mean()), 3)
                        if mask.any() else None}
     return {"id": snapshot_id, "sim_time": round(world.t, 3),

@@ -216,9 +216,7 @@ def test_goal_cache_invalidates_on_pickup(w):
     v.state, v.buried, v.debris_remaining = CLEARED, False, 0.0
     ex.assign(w, i, Assignment(task_id="x1", kind="extract", target=tuple(v.pos), victim=0))
     before = ex.goals(w)[0][ex.goals(w)[1][i]]
-    assert before == pytest.approx(
-        (round(v.pos[0] / w.cell) * w.cell, round(v.pos[1] / w.cell) * w.cell)
-    )
+    assert before == pytest.approx(tuple(v.pos))
     w.carrying[i] = 0
     v.state, v.carrier = 3, i     # CARRIED
     after = ex.goals(w)[0][ex.goals(w)[1][i]]

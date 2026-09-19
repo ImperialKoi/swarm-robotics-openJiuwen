@@ -574,7 +574,7 @@ def snap_passable(world, p) -> tuple[float, float] | None:
                     np.asarray(p[0] + dx * world.cell), np.asarray(p[1] + dy * world.cell),
                     world.cell, world.shape,
                 )
-                if world.passable[int(iy), int(ix)]:
+                if world.passable[int(iy), int(ix)] and world.water[int(iy), int(ix)] == 0:
                     return (float((int(ix) + 0.5) * world.cell),
                             float((int(iy) + 0.5) * world.cell))
     return None
