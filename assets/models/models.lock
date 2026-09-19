@@ -1,0 +1,14 @@
+# Model weights are not committed (see .gitignore). This file is, so a checkout can
+# verify it has the same bytes the measurements were taken against.
+#
+# Fetch with:
+#   llama download -hf Qwen/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M
+#   ln -sf <cache path it prints> assets/models/hivemind-base.gguf
+
+hivemind-base.gguf:
+  repo: Qwen/Qwen2.5-1.5B-Instruct-GGUF
+  file: qwen2.5-1.5b-instruct-q4_k_m.gguf
+  quant: Q4_K_M
+  sha256: 6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e
+  added: 2026-09-04
+  rung: 2   # base-local; rung 1 (tuned-local) is produced by the D12 training ladder
