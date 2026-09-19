@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from swarmmind.cli import main
+from swarmmind.contracts import topics
 from swarmmind.hivemind.team.client import WorkerClient
 from swarmmind.hivemind.team.config import TeamConfig
 from swarmmind.hivemind.team.controller import ResponseTeam
@@ -172,6 +173,7 @@ def test_application_arbitration_duplicate_suppression_and_expiry(team, mission)
     step(team, mission)
     assert team.stats["applied"] == 1
     assert sid in mission.hivemind.protected_sectors
+    assert mission.bus.latest(topics.HIVEMIND_DIRECTIVES)["source"] == "api"  # hosted model
     k = mission.world.sector_ids.index(sid)
     assert mission.world.sector_priority[k] == 0
     # A completed scripted proposal may not overwrite or renew a team lease.

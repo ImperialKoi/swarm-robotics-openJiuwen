@@ -9,5 +9,5 @@ token_budget: 9000
 max_candidates: 8
 hazard_ceiling: 0.35
 explored_ceiling: 0.96
-model_url: https://api.openai.com/v1/chat/completions
-model: gpt-4.1-mini
+model_url: https://openrouter.ai/api/v1/chat/completions
+model: openai/gpt-4.1-mini

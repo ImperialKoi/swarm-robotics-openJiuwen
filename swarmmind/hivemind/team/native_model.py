@@ -1,4 +1,4 @@
-"""SDK model-client extension for bounded OpenAI/loopback tool arguments.
+"""SDK model-client extension for bounded OpenRouter/loopback tool arguments.
 
 The installed llama.cpp build can ignore tool_choice. JSON-schema decoding is
 reliable, so adapt one native tool's argument schema into a structured response.
@@ -18,6 +18,8 @@ from openjiuwen.core.foundation.llm import (
     UserMessage,
 )
 
+from ..providers.openai_api import routing
+
 PROVIDER = "SwarmMindStructured"
 
 
@@ -33,6 +35,12 @@ class LocalToolArguments(OpenAIModelClient):
         # tools and response_format cannot both constrain llama.cpp decoding.
         # Reuse the SDK's HTTP client, accounting, error handling and timeouts.
         self.model_config.tool_choice = "none"
+        # No tools are sent, so parallel_tool_calls is meaningless; no OpenRouter host
+        # accepts it, and require_parameters would then reject every route.
+        self.model_config.parallel_tool_calls = None
+        extra = routing(self.model_client_config.api_base + "/chat/completions")
+        if extra:
+            kwargs["extra_body"] = {**(kwargs.get("extra_body") or {}), **extra}
         result = await super().invoke(
             [*messages, prompt], tools=None,
             response_format={"type": "json_schema", "json_schema": {

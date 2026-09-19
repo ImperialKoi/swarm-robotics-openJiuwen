@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time installation only; demo inference is entirely local.
+# One-time installation only; inference goes to OPENROUTER_API_KEY's endpoint at run time.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [ ! -x integrations/workswarm/.venv/bin/python ]; then

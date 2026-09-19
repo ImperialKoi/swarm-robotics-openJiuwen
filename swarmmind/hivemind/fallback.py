@@ -7,7 +7,7 @@ port 8080 would be a self-inflicted wound.
 
     1. tuned-local  llama-server + the fine-tuned GGUF, schema-constrained  (primary)
     2. base-local   the same server running stock Qwen2.5-1.5B-Instruct     (fallback)
-    3. api          OpenAI, selected by --hivemind-allow-api (replaces local rungs)
+    3. api          OpenRouter, selected by --hivemind-allow-api (replaces local rungs)
     4. scripted     phase-keyed heuristic directives                        (always works)
 
 Rungs that cannot possibly work are dropped at construction rather than tried and timed
@@ -15,6 +15,8 @@ out, so a laptop with no llama-server does not spend 8 s per cycle discovering t
 """
 
 from __future__ import annotations
+
+from contextlib import suppress
 
 from .providers.scripted import ScriptedProvider
 
@@ -29,10 +31,8 @@ def build_ladder(world, tracker=None, *, allow_api: bool = False,
     if allow_api:
         from .providers.openai_api import OpenAIProvider
 
-        try:
+        with suppress(ValueError):  # no key: the scripted safety floor still works
             ladder.append(OpenAIProvider())
-        except ValueError:
-            pass  # no key: the scripted safety floor still works
         ladder.append(ScriptedProvider(world, tracker))
         return ladder
 
