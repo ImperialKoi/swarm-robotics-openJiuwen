@@ -1,0 +1,211 @@
+# SwarmMind response team
+
+An optional multi-agent application for simulated disaster search and rescue. A rescue
+lead proposes work, a logistics specialist challenges unsupported plans, and a safety
+reviewer can veto dispatch. Their reviewed sector orders affect the existing auction;
+the auction and robot reflexes continue independently when the team is unavailable.
+
+This is a simulated coordination demonstration, not a deployed emergency-response
+system. It demonstrates collaboration and failure handling. No improvement in rescue
+score over a single agent or the scripted baseline has been established.
+
+## Install once
+
+Use Python 3.12 through `uv`, as the main project requires:
+
+```bash
+uv sync
+./scripts/setup_response_team.sh
+```
+
+WorkSwarm **0.2.6** and its resolved dependencies are pinned in
+[`requirements.lock`](../integrations/workswarm/requirements.lock), in a separate
+`integrations/workswarm/.venv`. The core environment does not import WorkSwarm. The
+lock was verified on macOS arm64 / Python 3.12; other platforms are unverified.
+Installation needs network access; inference and mission execution use localhost only.
+The first framework import can take tens of seconds; startup has a separate 90-second
+limit while the scripted advisor keeps working.
+
+Use the stock Qwen2.5-1.5B-Instruct Q4_K_M GGUF documented in
+[`models.lock`](../assets/models/models.lock). Put it at
+`assets/models/hivemind-base.gguf`; expected SHA256:
+
+```text
+6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e
+```
+
+`llama` must be on PATH. This checkout also has a local launcher in `.local/bin`.
+The setup script installs the framework, not the model/server or Godot.
+
+If the model is missing, download the official artifact once and verify it before use:
+
+```bash
+curl -L --fail \
+  https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf \
+  -o assets/models/hivemind-base.gguf
+shasum -a 256 assets/models/hivemind-base.gguf
+```
+
+## Run the real application
+
+Terminal 1:
+
+```bash
+PATH="$PWD/.local/bin:$PATH" ./scripts/serve_hivemind.sh
+```
+
+Terminal 2, after the model says it is listening on port 8080:
+
+```bash
+uv run python -m swarmmind.cli run --demo --scenario demo --seed 42 --wait \
+  --response-team --team-trace runs/team/live.jsonl \
+  --team-goal "Prioritize confirmed rescue work and revise the response as hazards and capacity change."
+```
+
+Open `godot/` in Godot and run its main scene. Keep terminal 2 beside it: the dashboard
+shows sector effects, while the terminal shows the role handoffs and proposal IDs.
+The user goal is optional; the default is in
+[`team_response.yaml`](../assets/scenarios/team_response.yaml). Only seeds 42–45 are
+the demo maps. The response team is not trained or fine-tuned on these maps.
+
+For a short real-runtime check, use `--scenario test --max-time 65` and omit `--wait`.
+For rule-based verification without a model or dashboard:
+
+```bash
+uv run python -m swarmmind.cli run --headless --scenario test \
+  --response-team heuristic --max-time 40
+```
+
+That mode is explicitly **heuristic**, not an LLM demo. An ordinary headless command
+without `--response-team` retains its original behavior and deterministic hash.
+`--response-team local` uses the same collaboration with a smaller custom coordinator;
+it must be described as custom orchestration, not WorkSwarm. `--team-python` can select
+an alternative isolated interpreter. `--no-hivemind` remains the Tier-3-silent control.
+
+## What the agents contribute
+
+| Role | Reads | Authority |
+|---|---|---|
+| Rescue lead | Observed work candidates, mission goal, previous decision/outcomes | Propose a sector order; accept or decline a peer revision |
+| Logistics | In-contact capacity, observed rescue backlog, feasible alternatives | Challenge the lead; propose another candidate or withhold |
+| Safety | Independent preflight check and recent outcome context | Approve the agreed proposal or veto it |
+
+```mermaid
+flowchart LR
+    Goal --> Lead
+    Observations --> Lead
+    Lead --> Logistics
+    Logistics -->|alternative and evidence| Revision[Lead revision]
+    Logistics -->|agreement| Safety
+    Revision --> Safety
+    Safety -->|approve| Filter[Current-state feasibility filter]
+    Safety -->|veto| Fallback[Scripted advisor]
+    Filter -->|valid| Auction[Sector priority and auction]
+    Filter -->|late or changed| Fallback
+    Auction --> Outcomes[Observed subsequent work]
+    Outcomes --> Lead
+```
+
+The official WorkSwarm **SwarmFlow engine** executes a fixed Python workflow using
+`run_workflow`, `agent`, structured schemas and a custom `AgentBackend`. It does not
+launch the full workbench, browser, generic shell tools, or a separate MCP server.
+Our workflow invokes role-scoped Python tools over a detached observation, then passes
+their results and peer messages to the role's model context. Tool sequencing is fixed;
+the model chooses a candidate or veto, rather than generating arbitrary tool calls.
+The goal decomposition is also deliberately fixed, not model-generated task discovery.
+
+Roles share one local model server but have separate bounded contexts and decision
+authority. Logistics feedback can change the lead's actual order; safety disagreement
+blocks it. Tests cover both dependencies, and the live rehearsal includes a peer
+revision and a safety veto. This establishes useful cross-checking, not that one more
+capable agent could never do the same task.
+
+## End-to-end demonstration
+
+1. Start the mission and explain the user goal. Show `LIVE TEAM (workswarm)` once ready.
+2. Follow one proposal ID through lead, logistics and safety. Use the recorded tool
+   evidence to explain the choice; small-model notes can be inaccurate.
+3. Show `applied` and the sector change in Godot. A later task award in that sector is
+   reported as an **association**, not proof the team caused a rescue.
+4. Show a naturally occurring peer revision or safety veto. Do not promise a fixed
+   timestamp or invent disagreement. The JSONL and Markdown report preserve the result.
+5. Stop only the team, leaving the running mission intact:
+
+   ```bash
+   touch runs/team/live.stop
+   ```
+
+   The supervisor terminates its worker; `SCRIPTED FALLBACK` is logged. Existing
+   accepted orders expire after the ordinary 30 sim-seconds. The auction continues.
+   The stop file is sticky: remove your own stop file before a new live-team run, or
+   choose a new trace path. Re-enabling requires a new mission; **there is no H toggle**.
+
+6. At mission end, open `runs/team/live.md` and the underlying JSONL. They include
+   proposals, peer revisions, vetoes, application, expiry, fallback and downstream work.
+   Replaying these saved artifacts is a **recorded example**, not live inference.
+
+For a separate, explicitly synthetic peer-revision verification with the real model:
+
+```bash
+uv run python scripts/check_response_team.py
+```
+
+This supplies unsupported rescue demand and a reachable exploration alternative. It
+passes only if logistics changes the lead's proposal and the revised order is reviewed.
+It never dispatches synthetic observations to a running mission. Small-model behavior
+can fail this check; a failed check is recorded as a failure, never replaced by a canned
+transcript. Unit tests exercise the same branch deterministically without model calls.
+
+## Limits and safety boundaries
+
+- One workflow at a time, scheduled at most every 20 sim-seconds; up to four model
+  turns (including one revision). Periodic snapshots include prior outcomes; this
+  version does not implement a separate event-triggered scheduler.
+- 20-second workflow wall deadline, 5-second per-call timeout, 120 generated tokens
+  per call, 9,000 total reported tokens. At most eight candidate sectors.
+- Results older than 20 sim-seconds, with mismatched IDs/evidence, or no longer feasible
+  are rejected. Final application uses the existing feasibility filter on the sim thread.
+- Orders expire after 30 sim-seconds. Scripted orders cannot overwrite or renew a live
+  team order in the same sector. Fresh review is required for renewal.
+- Snapshot data comes from observed hazards/reports/tasks and connected-unit aggregates.
+  It omits hidden casualties, actual hazard geometry, seeds and casualty totals. The
+  agents never connect to the dashboard's privileged WebSocket feed.
+- Route feasibility is **unknown**; connected-unit counts do not prove a safe route.
+  No agent controls individual motors, bypasses reflexes, or adds a task directly.
+- Model timeouts, runtime errors and worker termination leave the scripted advisor and
+  autonomous auction running. Headless runs never accidentally pick up a live model.
+- Local generation is not byte-deterministic. Trace paths are overwritten on startup;
+  use distinct paths to retain multiple rehearsals. No API key or cloud model is used.
+
+## Current build
+
+The demo is a custom 2.5D kinematic simulation with a 3D display: **512 robots, 110
+casualties, 48 sectors**, on a 360 × 240 m map. The evolved roster has 171 scouts,
+117 diggers, 96 carriers and 128 relays. Classical perception ships; the CNN was trained
+but missed its shipping margin (M-74). The local language model is stock, not fine-tuned.
+Commander, unit policy and zone routing remain off. The response team is opt-in.
+
+The unit policy was **tuned on the four demo maps** and gated out. The historical
+`SHIPPING.md` gate results now carry a generated current-defaults annotation; an earlier
+zone-routing win with Tier 3 off does not override the later M-76f decision.
+
+The earlier runbook timings and rescue figures predate the current scenario. Use
+the new measured rehearsal record in [M-79](MEASUREMENTS.md#m-79--response-team-build),
+not those old timings, to describe this build. A complete clean cold-boot/offline rehearsal
+and backup video remain operator preparation; the recorded trace is not a video.
+
+Measure the complete stack with:
+
+```bash
+uv run python scripts/residency.py --seconds 480 --out runs/team/residency.json
+```
+
+This now includes the isolated team worker. The development machine was already heavily
+swapped; the observed swap growth prevents claiming a clean residency pass. Do not infer
+that an isolated worker footprint establishes a smooth full demo under all laptop loads.
+
+The final build passed **542 tests**, lint and the unchanged fixture smoke hash
+`86a44954eda1a756`. [Recorded examples](../integrations/workswarm/examples/README.md)
+include the full-mission excerpt, a final-build real-runtime fixture and the failed
+synthetic diagnostic. The final fixture demonstrated revision, application and one
+clean fallback acknowledgment while continuing to t=65.
