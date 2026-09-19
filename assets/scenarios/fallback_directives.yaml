@@ -1,0 +1,35 @@
+# Rung 4 of the hivemind ladder: what Tier 3 says when there is no model at all.
+#
+# One shared file, not one per scenario -- this is the policy that has to hold on a map
+# nobody tuned it for, which is exactly the situation it exists for (no network, no GPU,
+# no GGUF, five minutes before the demo).
+#
+# The first two thresholds keep the baseline off its own safety net. The scripted
+# provider used to propose abandoning the sector containing the base, and the filter
+# refused it 21 times a run (MEASUREMENTS.md M-25) -- rejections that meant nothing and
+# drowned out the ones that did.
+
+# Hazard fraction in a sector before the baseline proposes writing it off.
+abandon_above: 0.35
+
+# ...but never while the swarm believes someone is still in there, unless it is this bad.
+# Must not exceed hivemind/filter.py's ABANDON_HAZARD_FLOOR, or the baseline proposes
+# directives its own filter will reject.
+abandon_with_casualty_above: 0.60
+
+# How many of the least-explored sectors to push into each cycle. More than two spreads
+# the swarm too thin to finish anything; zero makes the fallback a no-op.
+push_sectors: 2
+
+# Sectors whose hazard exceeds this are not worth pushing search into.
+push_hazard_ceiling: 0.35
+
+# Only push search into sectors the comms component can plausibly cover.
+#
+# "Least explored" is very nearly "farthest from base", so ranking on emptiness alone
+# aims the swarm past its own radio horizon -- and `mark_seen` records nothing from an
+# out-of-contact robot. Measured on seed 42 before this existed: 61% of pushes aimed
+# beyond the median comms reach of 239 m, A8 among them at 434 m (MEASUREMENTS.md M-43).
+#
+# Set false to A/B the old behaviour.
+push_within_reach: true

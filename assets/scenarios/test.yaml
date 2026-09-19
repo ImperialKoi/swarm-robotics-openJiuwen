@@ -1,0 +1,91 @@
+# Small, fast scenario for the test suite. NOT the demo.
+# Kept deliberately tiny so `make check` stays seconds, not minutes: a full
+# suite against demo.yaml (512 robots, 66k cells) would cost minutes per run
+# and nobody would run it on every commit.
+name: test
+
+map:
+  width_m: 96.0
+  height_m: 64.0
+  cell: 0.5                    # -> 192 x 128 occupancy grid
+  sector_rows: 3               # A / B / C
+  sector_cols: 4               # 1..4  -> 12 sectors
+  n_clusters: 90
+  cluster_radius_m: [1.5, 5.0]
+  rubble_fraction: 0.35        # of clusters that are passable-but-slow rather than solid
+
+# Scaled-down landform for the fast fixture. Same features, smaller.
+terrain:
+  hills: 6
+  hill_radius_m: [12.0, 30.0]
+  hill_steepness: [0.10, 0.22]
+  mountains: 1
+  mountain_radius_m: [18.0, 28.0]
+  mountain_steepness: [0.26, 0.45]
+  marshes: 3
+  marsh_radius_m: [7.0, 14.0]
+  marsh_depth_m: [0.20, 0.38]
+  rivers: 1
+  river_width_m: [9.0, 15.0]
+  river_depth_m: [0.85, 1.10]     # depth at the centreline; the bed is parabolic, so the
+                                  # middle stops a tracked unit (0.45 m wade) while a
+                                  # legged one still fords it (1.20 m)
+  river_fords: 3            # shallow crossings, so a river routes traffic rather than severing it
+  ditches: 4
+  ditch_length_m: [12.0, 30.0]
+  ditch_width_m: [2.0, 4.0]
+  ditch_depth_m: [0.8, 1.4]
+
+base: [6.0, 10.0]              # sector A1
+extraction_zones: [[90.0, 54.0]]   # sector C4 forward staging; base also counts
+extraction_radius: 4.0
+
+robots_per_lane: 4
+
+victims:
+  count: 8
+  buried_count: 4              # require a scoop robot before a gripper can extract
+  min_separation_m: 12.0
+  distance_weight_exp: 1.5     # bias placement away from base
+  clear_rate: 0.25             # debris fraction per second per digger in reach
+  carry_speed_factor: 0.6      # carriers slow down while loaded
+
+hazard:
+  ignite_t: 90.0
+  radius0: 3.0
+  growth_rate: 0.075           # m/s  -> r ~= 27.8 m at t=420
+  drift_speed: 0.15            # m/s
+  origin_sector: B3
+  battery_drain: 0.015         # fraction/s inside the hazard (1.5 %/s)
+
+comms:
+  base_radius: 30.0
+  relay_radius: 28.0
+
+battery:
+  idle: 0.0005                 # fraction/s  (0.05 %/s)
+  moving: 0.0020               # fraction/s at v_max  (0.20 %/s)
+
+rates:
+  tick_hz: 20.0
+  fog_hz: 5.0                  # decimated sensor/LOS pass
+  comms_hz: 1.0
+  sector_hz: 2.0
+  auction_hz: 1.0
+  blackboard_hz: 10.0
+  heartbeat_hz: 2.0
+  hivemind_period_s: 6.0
+  orphan_timeout_s: 2.0
+
+fault:
+  enabled: true
+  min_t: 200.0                 # state-triggered, not wall-clock (spec section 10)
+  min_rescued: 2
+  fallback_t: 260.0
+
+mission_duration_s: 420.0
+
+bid_weights:
+  battery: 20.0
+  load: 15.0
+  hazard: 40.0

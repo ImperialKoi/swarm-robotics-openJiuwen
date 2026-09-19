@@ -1,0 +1,237 @@
+"""Message schemas. FROZEN.
+
+This module is the single definition of every payload that crosses the bus. No other
+module may define these shapes, and the Godot client parses these and only these.
+See CLAUDE.md invariant #4.
+
+Field names and nesting match docs/TECHNICAL.md section 4 verbatim.
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from .version import SCHEMA_VERSION
+
+# --- enums, as Literal aliases so pydantic validates them at the boundary ----------
+
+Actuator = Literal["none", "gripper", "scoop", "antenna"]
+LaneLabel = Literal["scout", "carrier", "digger", "relay"]
+RobotStatus = Literal["active", "out_of_comms", "failed", "destroyed"]
+TaskKind = Literal["explore", "investigate", "clear_debris", "extract", "relay", "retreat"]
+Requires = Literal["any", "scoop", "gripper", "antenna"]
+Priority = Literal["high", "normal", "low", "abandon"]
+DirectiveAction = Literal["explore", "rescue", "hold", "abandon"]
+HivemindSource = Literal["tuned-local", "base-local", "api", "scripted"]
+VictimState = Literal["hidden", "found", "cleared", "carried", "rescued"]
+
+EventKind = Literal[
+    "victim_found", "victim_cleared", "victim_rescued", "report_dismissed",
+    "task_created", "task_awarded", "task_orphaned", "task_completed",
+    "robot_destroyed", "robot_out_of_comms", "robot_reconnected", "robot_recharged",
+    "hazard_ignited", "sector_abandoned",
+    "directive_issued", "directive_rejected", "hivemind_offline",
+    "mission_complete",
+]
+
+#: What a robot is doing, as a small int on the wire. **Not the same question as
+#: `status`**, which says whether a robot is alive and in contact.
+#:
+#: Added because the dashboard could not tell a working robot from a broken one. A relay
+#: parked on a post is motionless for the rest of the mission *by design* -- it is holding
+#: the link a dozen robots report through -- and it rendered as an identical still box to
+#: one wedged against a rock. Measured on seed 42: of ~80 stationary robots, ~32 were
+#: doing exactly what they should and ~42 were genuinely stuck, and nothing on screen
+#: separated them. `bridge.py` was handed the executor and never read it.
+#:
+#: main.gd has the same table as ACTIVITY_*, cross-checked by test_bridge_protocol.py.
+ACTIVITY: dict[str, int] = {
+    "idle": 0,          # no assignment and nowhere useful to be
+    "drift": 1,         # no assignment, walking at unexplored ground
+    "explore": 2,
+    "investigate": 3,
+    "dig": 4,
+    "extract": 5,       # en route to a casualty
+    "carry": 6,         # holding one
+    "relay_post": 7,    # holding a post: motionless ON PURPOSE
+    "relay_move": 8,    # bridging, reinforcing, or creeping toward dark ground
+    "retreat": 9,
+    "recover": 10,      # out of contact, closing on the nearest link
+    "recharge": 11,
+}
+
+#: actuator -> the display label the dashboard and the original spec use.
+#: ``actuator`` is the source of truth for capability checks; ``type`` is cosmetic.
+LANE_LABEL: dict[str, str] = {
+    "none": "scout",
+    "scoop": "digger",
+    "gripper": "carrier",
+    "antenna": "relay",
+}
+
+#: task kind -> the actuator required to execute it.
+TASK_REQUIRES: dict[str, str] = {
+    "explore": "any",
+    #: Go look at a candidate the detector reported. Roughly half of these at long
+    #: range turn out to be warm rubble, and finding that out costs a trip -- which is
+    #: the honest consequence of perceiving rather than being told.
+    "investigate": "any",
+    "clear_debris": "scoop",
+    "extract": "gripper",
+    "relay": "antenna",
+    "retreat": "any",
+}
+
+
+class _Msg(BaseModel):
+    """Base for every on-bus payload."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    schema_: str = Field(default=SCHEMA_VERSION, alias="schema")
+
+
+# --- /swarm/state ------------------------------------------------------------------
+
+
+class RobotState(_Msg):
+    id: str
+    type: LaneLabel
+    actuator: Actuator
+    pos: tuple[float, float]
+    heading: float
+    battery: float
+    status: RobotStatus
+    current_task: str | None = None
+    carrying: str | None = None
+    last_action_reason: str = ""
+
+
+class SectorState(_Msg):
+    id: str
+    explored_pct: float
+    #: KNOWN hazard only -- hazard in cells the swarm has actually observed.
+    #: Never the ground-truth hazard extent.
+    hazard_level: float
+    victims_found: int
+    priority: Priority = "normal"
+    abandoned: bool = False
+
+
+class ReportState(_Msg):
+    """A contact the swarm believes in. May be a phantom -- that is the honest part."""
+
+    id: str
+    pos: tuple[float, float]
+    state: Literal["candidate", "confirmed", "resolved", "dismissed"]
+    conf: float
+    n_obs: int
+    views: int
+
+
+class SwarmState(_Msg):
+    tick: int
+    sim_time: float
+    robots: list[RobotState]
+    sectors: list[SectorState]
+    victims_found_total: int
+    victims_rescued_total: int
+    victims_total: int
+    robots_active: int
+    robots_lost: int
+    comms_component_size: int
+    reports: list[ReportState] = Field(default_factory=list)
+
+
+# --- /world/ground_truth  (dashboard only) ----------------------------------------
+
+
+class VictimTruth(_Msg):
+    id: str
+    pos: tuple[float, float]
+    state: VictimState
+    buried: bool
+
+
+class HazardTruth(_Msg):
+    centre: tuple[float, float]
+    radius: float
+    active: bool
+
+
+class GroundTruth(_Msg):
+    victims_actual: list[VictimTruth]
+    hazard_zone_actual: HazardTruth
+    explored_mask_rle: str = ""
+
+
+# --- /hivemind/directives ----------------------------------------------------------
+
+
+class Directive(_Msg):
+    sector: str
+    priority: Priority
+    action: DirectiveAction
+    reason: str | None = None
+
+
+class RejectedDirective(_Msg):
+    directive: dict
+    rule: str
+
+
+class DirectiveMessage(_Msg):
+    issued_at: float
+    source: HivemindSource
+    latency_ms: int
+    reasoning: str
+    directives: list[Directive]
+    rejected: list[RejectedDirective] = Field(default_factory=list)
+
+
+# --- auction -----------------------------------------------------------------------
+
+
+class Task(_Msg):
+    task_id: str
+    kind: TaskKind
+    sector: str
+    target: tuple[float, float]
+    requires: Requires
+    priority_rank: int = 1
+    created_at: float = 0.0
+    value: float = 1.0
+
+
+class Bid(_Msg):
+    robot_id: str
+    task_id: str
+    bid_score: float
+    capable: bool
+
+
+class Award(_Msg):
+    robot_id: str
+    task_id: str
+    awarded_at: float
+    reason: str
+
+
+class Heartbeat(_Msg):
+    robot_id: str
+    t: float
+
+
+# --- /swarm/events -----------------------------------------------------------------
+
+
+class Event(_Msg):
+    t: float
+    kind: EventKind
+    text: str
+    robot: str | None = None
+    victim: str | None = None
+    task: str | None = None
+    sector: str | None = None
+    pos: tuple[float, float] | None = None

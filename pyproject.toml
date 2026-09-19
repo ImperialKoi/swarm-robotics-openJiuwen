@@ -1,0 +1,38 @@
+[project]
+name = "swarmmind"
+version = "0.1.0"
+description = "Hierarchical hivemind-controlled robot swarm for simulated disaster search and rescue"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy>=1.26,<3",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Optional features; kept out of the default env to protect the 8 GB budget.
+bridge  = ["websockets>=12.0"]            # Dashboard bridge
+api     = ["anthropic>=0.40"]             # Hivemind provider rung 3
+# No [visualize]: matplotlib is ~200 MB resident on an 8 GB machine, and archive
+# heatmaps go through viz/png.py, which is already stdlib-only.
+evo     = ["ribs>=0.7"]                   # MAP-Elites
+dev     = ["pytest>=8.0", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["swarmmind"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "NPY"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

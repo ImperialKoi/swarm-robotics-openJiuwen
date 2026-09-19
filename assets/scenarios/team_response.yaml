@@ -1,0 +1,13 @@
+# Optional response team. These are engineering limits, not measured performance claims.
+goal: Search the disaster zone, prioritize confirmed rescue work, and adapt to observed hazards and failures.
+interval_s: 20.0
+deadline_s: 20.0
+max_age_s: 20.0
+call_timeout_s: 5.0
+max_tokens: 120
+token_budget: 9000
+max_candidates: 8
+hazard_ceiling: 0.35
+explored_ceiling: 0.96
+model_url: http://127.0.0.1:8080/v1/chat/completions
+model: qwen2.5-1.5b-instruct

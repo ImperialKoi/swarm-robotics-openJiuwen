@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.DS_Store
+
+# Model weights: large, reproducible, checksummed in models.lock
+assets/models/*.gguf
+assets/models/*.safetensors
+# Archives: regenerate with `make evolve`
+assets/archives/*.pkl
+# Godot
+godot/.godot/
+godot/export_presets.cfg
+# Run artefacts
+*.mp4
+
+# Source asset packs: import into assets/models/, do not commit the raw pack
+nature-pack/
+.agents/
+
+# Optional response-team runtime logs and rehearsals; curated examples live in integrations/.
+/logs/
+/runs/team/
