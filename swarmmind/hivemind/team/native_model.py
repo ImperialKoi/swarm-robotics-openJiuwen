@@ -18,7 +18,7 @@ from openjiuwen.core.foundation.llm import (
     UserMessage,
 )
 
-from ..providers.openai_api import routing
+from ..providers.openai_api import routing, tuning
 
 PROVIDER = "SwarmMindStructured"
 
@@ -38,8 +38,11 @@ class LocalToolArguments(OpenAIModelClient):
         # No tools are sent, so parallel_tool_calls is meaningless; no OpenRouter host
         # accepts it, and require_parameters would then reject every route.
         self.model_config.parallel_tool_calls = None
-        extra = routing(self.model_client_config.api_base + "/chat/completions")
-        if extra:
+        model = self.model_config.model_name
+        extra = routing(self.model_client_config.api_base + "/chat/completions", model)
+        if extra:  # hosted only; a loopback server keeps the request it always had
+            if not tuning(model)["temperature"]:
+                self.model_config.temperature = None  # rejected by frontier hosts (M-88)
             kwargs["extra_body"] = {**(kwargs.get("extra_body") or {}), **extra}
         result = await super().invoke(
             [*messages, prompt], tools=None,

@@ -19,7 +19,7 @@ class TeamConfig(BaseModel):
     deadline_s: float = Field(gt=0)
     max_age_s: float = Field(gt=0, le=30)
     call_timeout_s: float = Field(gt=0)
-    max_tokens: int = Field(gt=0, le=256)
+    max_tokens: int = Field(gt=0, le=2048)
     token_budget: int = Field(gt=0)
     max_candidates: int = Field(gt=0, le=16)
     hazard_ceiling: float = Field(ge=0, le=1)

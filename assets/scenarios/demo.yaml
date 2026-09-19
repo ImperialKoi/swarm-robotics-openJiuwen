@@ -9,78 +9,115 @@
 name: demo
 
 map:
-  width_m: 360.0
-  height_m: 240.0
-  cell: 1.0                    # -> 360 x 240 = 86,400 cells
+  width_m: 320.0
+  height_m: 216.0
+  cell: 1.0                    # -> 320 x 216 = 69,120 cells; 20% less area
                                # 1.0 m, not 0.5: distance-field BFS cost is O(cells x
                                # diameter), so a 4x finer grid on a 10x larger map is
                                # ~40x the auction cost. Robot radii (0.22-0.45 m) still
                                # sit inside one cell, so collision response is unchanged.
   sector_rows: 6               # A..F
-  sector_cols: 8               # 1..8  -> 48 sectors, each 60.0 x 53.3 m
+  sector_cols: 8               # 1..8  -> 48 sectors, each 40 x 36 m
                                # Held at 48 on purpose: the hivemind prompt carries one
                                # line per sector, and 80 sectors bloats it for no gain.
-  n_clusters: 506              # scaled with area from 900 at 480x320; passable re-checked
-                               # rather than assumed (M-2: scaling count by area alone was
-                               # wrong once before, because cluster radius grew too).
-                               # Scaling count by area alone was wrong once before:
-                               # cluster radius also grew, so coverage went up 33x
-                               # against a 10.8x larger map. Always re-sweep.
+  # The authored profile places buildings, trees and debris by terrain region.
+  n_clusters: 0
   cluster_radius_m: [2.5, 9.0]
   rubble_fraction: 0.35
 
-# Landform. This is NOT decoration: slope and water gate which chassis can go where
-# (swarmmind/sim/terrain.py), so a river is a routing problem and a mountain flank is
-# a legged-only route. Terrain nothing is blocked by would be scenery.
 terrain:
-  # Relief is built at three scales. Long-wavelength noise (in terrain.py) gives rolling
-  # ground, `hills` are the mid-scale bumps that make it read as landscape, and
-  # `mountains` are the few steep peaks that actually stop a chassis.
-  hills: 20
+  # Generic-generator parameters are inactive with reference set. Depth ranges also
+  # describe the wading bands checked by the shared terrain invariants.
+  hills: 0
   hill_radius_m: [26.0, 68.0]
-  hill_steepness: [0.10, 0.22]       # max slope ~0.12-0.27: under a wheeled unit's 0.40,
-                                     # so hills shape routes without severing them.
-                                     # Hills STACK with the noise and with each other, so
-                                     # the number that matters is not this one but the
-                                     # fraction of the map over 0.40 -- measured, not
-                                     # assumed (M-62).
-  mountains: 4
+  hill_steepness: [0.10, 0.22]
+  mountains: 0
   mountain_radius_m: [48.0, 82.0]
-  mountain_steepness: [0.26, 0.45]   # max slope ~0.33-0.57: some flanks stop wheels
-                                     # only, others stop tracks too
-  marshes: 8
+  mountain_steepness: [0.26, 0.45]
+  marshes: 0
   marsh_radius_m: [13.5, 25.5]
-  marsh_depth_m: [0.20, 0.38]        # under tracked's 0.45 m wade, over wheeled's 0.0
-  # Straight, edge to edge, and filled to their banks. Depth here is the depth at the
-  # CENTRELINE -- the bed is parabolic, so a river passes through every depth band on its
-  # way across: shallow rim a tracked unit can stand in, deep middle it cannot cross,
-  # and never over a legged unit's 1.20 m wade.
-  rivers: 2
-  river_width_m: [16.0, 26.0]
-  river_depth_m: [0.85, 1.10]
-  river_fords: 2            # fewer crossings: at 4 a tracked unit reached as much of
-                            # the map as a legged one and the distinction vanished
-  ditches: 14
+  marsh_depth_m: [0.20, 0.38]
+  rivers: 0
+  river_width_m: [14.0, 22.0]
+  river_depth_m: [0.90, 1.10]
+  river_fords: 0
+  ditches: 0
   ditch_length_m: [30.0, 90.0]
   ditch_width_m: [2.5, 4.5]
   ditch_depth_m: [1.0, 1.8]
 
-base: [12.0, 15.0]             # sector A1
-# Casualty collection points on a 4 x 3 lattice; base is the corner one.
-#
-# The count is set by the mission clock, not by taste. A loaded carrier moves at
-# v_max x carry_speed_factor, so the worst-case round trip -- the lattice half-diagonal,
-# here ~102 m -- must fit inside the run with time left over to search. Four zones on
-# this map left a 161 m worst case: a 448 s round trip on a 420 s mission, i.e.
-# casualties that could not be rescued at all. Enforced by
-# tests/test_world.py::test_demo_scenario_is_constructible_and_sane, which derives its
-# bound from the scenario rather than hardcoding metres.
-extraction_zones: [[124.0, 15.0], [236.0, 15.0], [348.0, 15.0],
-                   [12.0, 120.0], [124.0, 120.0], [236.0, 120.0], [348.0, 120.0],
-                   [12.0, 225.0], [124.0, 225.0], [236.0, 225.0], [348.0, 225.0]]
+  # Reference-based crop of the owner's confluence photographs: a small local area,
+  # not the whole valley shrunk to fit. Coordinates are illustrative local metres,
+  # not georeferenced survey data. See docs/NEPAL_TERRAIN.md for scale and limits.
+  reference:
+    map_m: [320.0, 216.0]
+    road_width_m: 4.8
+    road_grade: 0.22
+    bank_clearance_m: 4.0
+    bank_height_m: 0.65
+    terrace_grade: 0.14
+    shoulder_distance_m: [18.0, 95.0]
+    shoulder_rise_m: 18.0
+    tree_spacing_m: 7.0
+    tree_radius_m: [1.3, 2.1]
+    foundation_shoulder_m: 5.0
+    debris_patches: 130
+    debris_radius_m: [1.0, 3.0]
+    # Two headwaters and one outlet: one confluence, not intersecting canals.
+    channels:
+      - width_m: 18.0
+        depth_m: 1.05
+        points: [[226, -12, 9.0], [222, 20, 8.2], [211, 49, 7.3], [188, 83, 6.0], [156, 108, 5.0]]
+      - width_m: 14.0
+        depth_m: 0.90
+        points: [[336, 181, 9.0], [290, 163, 8.0], [248, 144, 7.0], [204, 124, 6.0], [156, 108, 5.0]]
+      - width_m: 22.0
+        depth_m: 1.10
+        points: [[156, 108, 5.0], [130, 136, 4.0], [109, 173, 2.7], [101, 199, 1.8], [98, 228, 0.8]]
+    # Roads follow the terraces. Only the two short junction crossings span water.
+    roads:
+      - [[30, 40], [70, 66], [111, 72], [143, 64], [182, 51], [196, 26], [202, 6]]
+      - [[70, 66], [48, 96], [40, 141], [45, 178], [30, 208]]
+      - [[143, 64], [125, 85], [136, 99], [172, 119], [192, 143], [232, 165], [270, 188], [297, 208]]
+      - [[172, 119], [194, 103], [225, 86], [241, 55], [253, 20], [285, 12]]
+    # [southwest x, y, footprint width, depth], all in metres. Small terrace hamlets.
+    buildings:
+      - [77, 51, 8, 6]
+      - [89, 54, 7, 8]
+      - [106, 44, 8, 6]
+      - [119, 49, 7, 8]
+      - [149, 44, 8, 7]
+      - [164, 32, 7, 8]
+      - [181, 10, 8, 6]
+      - [169, 10, 8, 7]
+      - [21, 105, 7, 8]
+      - [51, 111, 8, 7]
+      - [20, 116, 7, 8]
+      - [51, 148, 8, 7]
+      - [25, 161, 7, 8]
+      - [53, 180, 8, 7]
+      - [69, 194, 8, 6]
+      - [244, 78, 8, 7]
+      - [246, 66, 7, 8]
+      - [257, 42, 8, 7]
+      - [269, 34, 8, 6]
+      - [171, 152, 8, 7]
+      - [211, 164, 8, 7]
+      - [233, 183, 8, 7]
+    # Ellipses: centre x/y and radii. Forest stays above the river floodplain.
+    woodlands: [[75, 12, 82, 32], [8, 87, 23, 52], [67, 143, 19, 60],
+                [177, 200, 49, 52], [272, 95, 51, 60], [308, 32, 39, 42],
+                [306, 210, 58, 18]]
+    landslides: [[192, 145, 29, 13], [255, 153, 30, 11], [139, 104, 18, 13]]
+
+# Collection points lie on the terrace-road network, clear of the three channels.
+base: [30.0, 40.0]
+extraction_zones: [[111.0, 72.0], [196.0, 26.0], [48.0, 96.0], [40.0, 141.0],
+                   [30.0, 208.0], [192.0, 143.0], [232.0, 165.0], [297.0, 208.0],
+                   [225.0, 86.0], [253.0, 20.0], [285.0, 12.0]]
 extraction_radius: 6.0
 
-robots_per_lane: 128           # 512 total, holding swarm density across 2.31x the
+robots_per_lane: 128           # 512 total; roster unchanged for the new crop
 
 # Lane sizes are NOT even, and the even split was costing the mission.
 #
@@ -149,35 +186,17 @@ victims:
 
 hazard:
   ignite_t: 90.0
-  radius0: 4.5
-  growth_rate: 0.20
-  drift_speed: 0.375
+  radius0: 4.0
+  growth_rate: 0.18
+  drift_speed: 0.335
   origin_sector: C4
   battery_drain: 0.015
 
-  # The fire burns out. Measured reason, not flavour: 82% of every robot lost in a run
-  # was lost to the hazard (MEASUREMENTS.md M-39), and ground the fire reached was gone
-  # for the rest of the mission -- `tasks.py` generates no work whose target is in known
-  # hazard, so a casualty the fire caught was written off in silence. Three of the seven
-  # cleared-but-uncollected casualties at t=420 were exactly that.
-  #
-  # A fire that only grows is a countdown, not a hazard. Real ones exhaust their fuel.
-  #
-  #   grows   90 -> 240 s   r: 4.5 -> 34.5 m  (still growing through the t=180 "abandon"
-  #                                            beat in PLAN §4, which depends on it)
-  #   recedes 240 -> 326 s  r: 34.5 -> 0 m    (the fire goes OUT, and the last ~90 s of
-  #                                            the mission are spent reclaiming every
-  #                                            metre of ground it took)
-  #
-  # Smaller and shorter than it was (peak 45 m at t=270, still 17 m at the buzzer). Once
-  # the phantom coarse edges were removed (M-60) robots actually travel instead of being
-  # held against rock, and travelling robots reach the fire: losses went 65 -> 85 on the
-  # same seeds. A hazard that kills a fifth of the swarm is a countdown, not a decision.
-  #
-  # Lengths scale with the map: every radius here is 0.75x its 480x320 value, because a
-  # fire sized for the old map covers 1.8x the fraction of this one.
+  # Preserve the seven-minute hazard beat. Lengths/speeds are 0.9x the previous
+  # 360 x 240 m scenario, matching the crop's linear scale (~sqrt(0.8)).
+  # Peak radius: 4 + (240-90)*0.18 = 31 m; fully receded by t=326.1 s.
   peak_t: 240.0
-  decay_rate: 0.40
+  decay_rate: 0.36
 
 comms:
   base_radius: 40.0
@@ -187,8 +206,7 @@ comms:
   # and discovery, and an out-of-contact robot cannot even be *given work* -- so range
   # buys the two numbers it can move. 46 rather than 54 because at 54 the network
   # effectively blankets the map and the relay lane stops posing a placement decision.
-  relay_radius: 46.0           # 128 relays cannot blanket a 320x208 m map: relay
-                               # placement stays a real decision, which is the point.
+  relay_radius: 46.0           # Kept at the existing measured range; re-rehearse the crop.
 
 battery:
   idle: 0.0005

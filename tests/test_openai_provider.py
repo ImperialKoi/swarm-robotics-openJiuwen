@@ -7,9 +7,11 @@ import pytest
 
 from swarmmind.hivemind.providers.openai_api import (
     OPENROUTER_URL,
+    TUNING,
     OpenAIProvider,
     response_text,
     routing,
+    tuning,
 )
 from swarmmind.hivemind.team.config import TeamConfig
 from swarmmind.hivemind.team.model import LocalModel
@@ -26,7 +28,7 @@ def fake_http(monkeypatch, content):
 
 def test_openrouter_request_is_authenticated_bounded_and_structured(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setenv("OPENROUTER_MODEL", "openai/gpt-4.1-mini")
+    monkeypatch.setenv("OPENROUTER_MODEL", "openai/gpt-5.6-terra")
     http = fake_http(monkeypatch, '{"reasoning":"Observed work","directives":[]}')
     result = OpenAIProvider().generate("system", "observations", 3.0)
     request = http.call_args.args[0]
@@ -34,16 +36,31 @@ def test_openrouter_request_is_authenticated_bounded_and_structured(monkeypatch)
     assert request.get_header("Authorization") == "Bearer test-key"
     assert http.call_args.kwargs["timeout"] == 3.0
     body = json.loads(request.data)
-    assert body["model"] == "openai/gpt-4.1-mini"
+    assert body["model"] == "openai/gpt-5.6-terra"
     assert body["response_format"]["json_schema"]["strict"]
-    assert body["provider"] == {"require_parameters": True}
+    assert body["provider"] == {"require_parameters": True, "sort": "latency"}
     assert "test-key" not in request.data.decode()
     assert json.loads(result)["directives"] == []
 
 
 def test_only_openrouter_requests_carry_routing_preferences():
-    assert routing(OPENROUTER_URL) == {"provider": {"require_parameters": True}}
-    assert routing("http://127.0.0.1:8080/v1/chat/completions") == {}
+    assert routing(OPENROUTER_URL)["provider"] == {"require_parameters": True, "sort": "latency"}
+    assert routing("http://127.0.0.1:8080/v1/chat/completions", "openai/gpt-5.6-terra") == {}
+
+
+@pytest.mark.parametrize("model", sorted(TUNING))
+def test_measured_models_send_only_fields_their_hosts_accept(monkeypatch, model):
+    """M-88: `temperature` is a 404 on frontier hosts, and reasoning tokens need room."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    http = fake_http(monkeypatch, '{"reasoning":"ok","directives":[]}')
+    OpenAIProvider(model).generate("system", "observations", 3.0)
+    body = json.loads(http.call_args.args[0].data)
+    tune = tuning(model)
+    assert ("temperature" in body) is tune["temperature"]
+    assert body["max_tokens"] == tune["max_tokens"] >= 200
+    assert body.get("reasoning") == tune["reasoning"] or tune["reasoning"] is None
+    # A reasoning model must be given more room than the answer itself needs.
+    assert tune["reasoning"] is None or body["max_tokens"] >= 400
 
 
 @pytest.mark.parametrize("url,key,routed", [
@@ -56,9 +73,12 @@ def test_team_client_routes_by_endpoint(monkeypatch, url, key, routed):
     config = TeamConfig.load().model_copy(update={"model_url": url})
     assert LocalModel(config, lambda *a, **k: None).generate("lead", {}, 2)["choice"] == 0
     request = http.call_args.args[0]
+    body = json.loads(request.data)
     assert request.full_url == url
     assert request.get_header("Authorization") == f"Bearer {key}"
-    assert ("provider" in json.loads(request.data)) is routed
+    assert ("provider" in body) is routed
+    # A loopback server keeps the request it always had, temperature included.
+    assert ("temperature" in body) is not routed
 
 
 @pytest.mark.parametrize("reason,refusal", [("length", None), ("stop", "refused")])

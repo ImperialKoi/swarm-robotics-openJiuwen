@@ -178,7 +178,7 @@ def _landmark(cx, cy, width, depth, base, hashed, biome, lod):
 
 def tile_primitives(occupancy: np.ndarray, cell: float, height_at: Callable,
                     lod: int = 0, origin: tuple[int, int] = (0, 0),
-                    water: np.ndarray | None = None) -> list[Primitive]:
+                    water: np.ndarray | None = None, reference=None) -> list[Primitive]:
     """Create a tile's common obstacle cover and progressively simpler decorations.
 
     ``height_at(x,y)`` samples the displayed triangle surface in world metres. Origin
@@ -199,7 +199,13 @@ def tile_primitives(occupancy: np.ndarray, cell: float, height_at: Callable,
                              (floor[3] - floor[0]) / (h * cell)])
         cx, cy = (gx + w * .5) * cell, (gy + h * .5) * cell
         biome = landscape_kind(cx, cy)
-        if np.linalg.norm(gradient) > .40:
+        if reference is not None:
+            from .reference_landscape import biome_at
+
+            biome = biome_at(reference, cx, cy)
+        # Wooded Nepal shoulders carry trees on steeper slopes than house terraces.
+        limit = .70 if reference is not None and biome == "forest" else .40
+        if np.linalg.norm(gradient) > limit:
             biome = "rock"
         tint = RUBBLE_COLOR if biome == "ruin" else (
             (.31, .35, .25) if biome == "forest" else ROCK_COLOR)

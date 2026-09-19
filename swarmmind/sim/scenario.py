@@ -51,6 +51,8 @@ class TerrainCfg:
     ditch_length_m: tuple[float, float]
     ditch_width_m: tuple[float, float]
     ditch_depth_m: tuple[float, float]
+    #: Authored metre-scale crop; absent on the reproducible procedural test fixture.
+    reference: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

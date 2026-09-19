@@ -4,6 +4,8 @@ extends Node3D
 ## Tall geometry stays within blocked cells; passable rubble is only 6 cm deep.
 ## Every LOD retains the same merged obstacle cover. No imported scene is loaded.
 
+const LANDSCAPE = preload("reference_landscape.gd")
+
 const TILE_METRES := 32.0
 const MERGE_METRES := 8.0
 const NEAR_DISTANCE := 95.0
@@ -24,6 +26,7 @@ const REGION_METRES := 40.0
 const FACES := [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4],
 	[1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]
 
+var _reference: Dictionary = {}
 var _surface: RefCounted
 var _terrain: Node
 var _occupancy := PackedByteArray()
@@ -40,7 +43,9 @@ var _last_force_detail := false
 
 
 func setup(surface: RefCounted, occupancy: PackedByteArray, width: int, height: int,
-		cell: float, material: ShaderMaterial, terrain: Node = null) -> void:
+		cell: float, material: ShaderMaterial, terrain: Node = null,
+		reference: Dictionary = {}) -> void:
+	_reference = reference
 	for entry: Dictionary in _resident.values():
 		(entry["node"] as Node3D).queue_free()
 	_resident.clear()
@@ -347,7 +352,10 @@ func _build_tile(key: int, lod: int) -> Dictionary:
 		var cx := (x0+x1)*.5
 		var cy := (y0+y1)*.5
 		var biome := _landscape_kind(cx, cy)
-		if Vector2(slope_x, slope_y).length() > .40:
+		if not _reference.is_empty():
+			biome = LANDSCAPE.biome_at(_reference, cx, cy)
+		var slope_limit := .70 if not _reference.is_empty() and biome == "forest" else .40
+		if Vector2(slope_x, slope_y).length() > slope_limit:
 			biome = "rock"
 		var tint := RUBBLE_COLOR if biome == "ruin" else \
 			(Color(.31, .35, .25) if biome == "forest" else ROCK_COLOR)

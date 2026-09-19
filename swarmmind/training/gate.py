@@ -184,7 +184,11 @@ def selection_note() -> str:
         "off after M-76f; its Tier-3-off win did not establish a win for the live demo. "
         "The classical detector ships; M-74 records the later CNN evaluation. "
         "The response team is an opt-in application, without a rescue-uplift claim. "
-        "See [current build and demo instructions](docs/MULTI_AGENT_DEMO.md).\n"
+        "See [current build and demo instructions](docs/MULTI_AGENT_DEMO.md).\n\n"
+        "The [Nepal confluence crop](docs/NEPAL_TERRAIN.md) changes map geometry even "
+        "for the same demo seeds. Gate results from the previous terrain do not establish "
+        "performance on this crop; components remain tuned on the four demo maps "
+        "used at the time of their training.\n"
         "<!-- /current-selection -->\n\n"
     )
 

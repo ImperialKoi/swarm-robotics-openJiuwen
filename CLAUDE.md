@@ -1,11 +1,12 @@
 > Current model configuration: the response team (openJiuwen native Leader/Teammate)
-> uses `openai/gpt-4.1-mini` through **OpenRouter** via `OPENROUTER_API_KEY`
-> (`OPENROUTER_MODEL` overrides). The regular hivemind uses the same endpoint with
+> uses `openai/gpt-5.6-terra` through **OpenRouter** via `OPENROUTER_API_KEY`
+> (`OPENROUTER_MODEL` overrides; per-model quirks live in `TUNING`, measured in M-88 --
+> a model outside that table gets a cautious default). The regular hivemind uses the same endpoint with
 > `--hivemind-allow-api`. Keep the key in the gitignored `.env` and run with
 > `uv run --env-file .env ...`. This user-requested hosted configuration supersedes the
 > local-Qwen setup below; network access is needed for model calls. Headless runs and
 > scripted fallback remain offline. Historical Qwen measurements do not validate hosted
-> behavior; M-87 has the first live OpenRouter checks.
+> behavior; M-87 and M-88 have the live OpenRouter checks.
 
 # CLAUDE.md — SwarmMind
 

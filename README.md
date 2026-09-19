@@ -29,6 +29,7 @@ uv run python -m swarmmind.cli run --headless --seed 42
 Model setup: copy `.env.example` to `.env` and set `OPENROUTER_API_KEY` (an OpenRouter
 `sk-or-v1-...` key), then run
 `uv run --env-file .env python -m swarmmind.cli run --demo --hivemind-allow-api`.
-Both paths default to `openai/gpt-4.1-mini` via OpenRouter; see the setup guide for the
-team's isolated runtime. `OPENROUTER_MODEL` overrides the model for both paths.
+Both paths default to `openai/gpt-5.6-terra` via OpenRouter, chosen by measurement over 15
+models (M-88); see the setup guide for the team's isolated runtime. `OPENROUTER_MODEL`
+overrides the model for both paths.
 `.env` is gitignored; no API key is stored in tracked files.

@@ -1,0 +1,57 @@
+{
+  "map_m": [
+    320.0,
+    216.0
+  ],
+  "simulation_ticks": 0,
+  "seeds": [
+    {
+      "seed": 42,
+      "setup_seconds": 0.418,
+      "free_fraction": 0.8723,
+      "relief_m": 47.625,
+      "wet_fraction": 0.1006,
+      "reach_ground": [
+        0.4939,
+        0.8279,
+        0.9946
+      ]
+    },
+    {
+      "seed": 43,
+      "setup_seconds": 0.352,
+      "free_fraction": 0.8737,
+      "relief_m": 47.961,
+      "wet_fraction": 0.1006,
+      "reach_ground": [
+        0.4835,
+        0.8276,
+        0.995
+      ]
+    },
+    {
+      "seed": 44,
+      "setup_seconds": 0.347,
+      "free_fraction": 0.8765,
+      "relief_m": 47.55,
+      "wet_fraction": 0.1006,
+      "reach_ground": [
+        0.5227,
+        0.8278,
+        0.9945
+      ]
+    },
+    {
+      "seed": 45,
+      "setup_seconds": 0.358,
+      "free_fraction": 0.8745,
+      "relief_m": 48.025,
+      "wet_fraction": 0.1006,
+      "reach_ground": [
+        0.4932,
+        0.828,
+        0.9948
+      ]
+    }
+  ]
+}

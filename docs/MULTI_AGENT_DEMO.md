@@ -26,9 +26,12 @@ Installation and OpenRouter inference need network access. The scripted fallback
 without a model connection. The first framework import has a separate startup budget.
 
 Inference goes through **OpenRouter** (`https://openrouter.ai/api/v1`, OpenAI-compatible).
-The default model is `openai/gpt-4.1-mini`, the same model as before, configured in
+The default model is `openai/gpt-5.6-terra`, chosen by measuring 15 models on this
+project's own request shapes ([M-88](MEASUREMENTS.md)), configured in
 `assets/scenarios/team_response.yaml`. Set `OPENROUTER_MODEL` to override it with an
-OpenRouter model supporting strict structured outputs. Keys are read only from
+OpenRouter model supporting strict structured outputs; per-model request quirks live in
+`TUNING` in `providers/openai_api.py`, and an unlisted model gets a cautious default.
+Anthropic models are not usable here: the two flagships refuse this prompt outright. Keys are read only from
 `OPENROUTER_API_KEY`; no key belongs in YAML, source files, trace logs, or Git. Every
 OpenRouter request sets `provider.require_parameters`, so it is only routed to hosts that
 honour the JSON schema. `.env` is gitignored and is not loaded implicitly; pass it with
@@ -61,8 +64,8 @@ endpoint; the legacy mode name describes the workflow, not where inference runs.
 
 Historical examples and measurements below used Qwen. They are retained as historical
 evidence, not validation of the hosted configuration. The first live OpenRouter checks
-are in [M-87](MEASUREMENTS.md): wiring and latency on the `test.yaml` fixture only, not
-rescue uplift or demo-map quality.
+are in [M-87](MEASUREMENTS.md) and [M-88](MEASUREMENTS.md): wiring, model selection and
+latency, including 180 s demo-map runs. Neither measures rescue uplift.
 
 Open `godot/` in Godot and run its main scene. Keep terminal 2 beside it: the dashboard
 shows sector effects, while the terminal shows the role handoffs and proposal IDs.

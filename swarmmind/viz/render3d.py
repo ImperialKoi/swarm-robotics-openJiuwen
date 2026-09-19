@@ -171,7 +171,8 @@ class Renderer3D:
         self.w, self.h = width, height
         self.cell = world.cell
         self.shape = world.shape
-        self.surface = TerrainSurface(world.height, world.occ, world.water, world.cell)
+        self.surface = TerrainSurface(world.height, world.occ, world.water, world.cell,
+                                      world.scn.terrain.reference)
         self._tiles = {}
         self._active_strides = {}
 
@@ -247,7 +248,8 @@ class Renderer3D:
                 lod = 0 if close or distance < 95 else (1 if distance < 210 else 2)
                 props = tile_primitives(world.occ[y:y1, x:x1], self.cell,
                                         self._render_height, lod, (x, y),
-                                        water=world.water[y:y1, x:x1])
+                                        water=world.water[y:y1, x:x1],
+                                        reference=world.scn.terrain.reference)
                 for prop in props:
                     colors = self._world_colors(world, prop.vertices,
                                                 np.tile(np.array(prop.color)*255, (8, 1)),

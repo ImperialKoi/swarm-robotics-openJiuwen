@@ -77,7 +77,7 @@ def _corners(values: np.ndarray) -> np.ndarray:
 
 
 class TerrainSurface:
-    def __init__(self, height, occ, water, cell: float):
+    def __init__(self, height, occ, water, cell: float, reference=None):
         height = np.asarray(height, dtype=np.float64)
         occ = np.asarray(occ)
         water = np.asarray(water, dtype=np.float64)
@@ -149,6 +149,10 @@ class TerrainSurface:
         bank = (1-_smoothstep(.3, 4, distance)) * (1-slope*.6)
         sand = np.array([.59, .55, .43]) + (detail-.5)[..., None]*.08
         colors += (sand-colors) * bank[..., None]
+        if reference is not None:
+            from .reference_landscape import dress_colors
+
+            colors = dress_colors(colors, wx, wy, detail, count, reference)
         colors *= (1-count*.22)[..., None]
         light = np.array([.45, .35, .82])
         light /= np.linalg.norm(light)

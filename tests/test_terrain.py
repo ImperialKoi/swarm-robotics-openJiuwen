@@ -235,9 +235,6 @@ def test_roads_are_graded_and_drained(demo):
 
 
 def test_terrain_generates_every_feature(demo):
-    cfg = demo.scn.terrain
-    assert cfg.hills > 0 and cfg.mountains > 0 and cfg.rivers > 0
-    assert cfg.ditches > 0 and cfg.marshes > 0
     assert demo.terrain.max() > 30.0, "no relief worth the name"
     assert (demo.water > 0).mean() > 0.03, "no water anywhere"
 
@@ -257,37 +254,8 @@ def test_relief_is_landform_not_grain(demo):
     assert (demo.slope <= CHASSIS_LIMITS["wheeled"][0]).mean() > 0.6
 
 
-def test_rivers_are_straight_and_full_of_water(demo):
-    """Two claims in one, because they are the same fix. A river is a straight channel
-    holding water to its banks, not a wandering dry trench: the water field used to be a
-    flat stamp on the cells a wobbling path happened to touch."""
-    deep = demo.water > CHASSIS_LIMITS["tracked"][1]
-    assert deep.sum() > 0
-    ys, xs = np.nonzero(deep)
-    # Straightness: the deep water lies along a small number of lines, so a total least
-    # squares fit per connected channel is tight. Cheap proxy -- the principal axis of
-    # each channel explains nearly all of its spread.
-    from swarmmind.sim.grid import _flood
-
-    seen = np.zeros_like(deep)
-    channels = 0
-    for y, x in zip(ys[::40], xs[::40], strict=True):
-        if seen[y, x]:
-            continue
-        comp = _flood(deep, (int(x), int(y)))
-        seen |= comp
-        cy, cx = np.nonzero(comp)
-        if len(cy) < 1200:
-            # Small pockets are legitimately round: where two channels cross, and where a
-            # ford pinches one off. The claim is about the channels themselves.
-            continue
-        pts = np.stack([cx - cx.mean(), cy - cy.mean()], axis=1).astype(float)
-        s = np.linalg.svd(pts, compute_uv=False)
-        aspect = s[0] / max(s[1], 1e-6)
-        assert aspect > 6.0, f"channel of {len(cy)} cells has aspect {aspect:.1f}"
-        channels += 1
-    assert channels > 0, "no channel large enough to check"
-
+def test_rivers_are_full_of_water(demo):
+    """The authored confluence bends; its bed must still hold a full depth profile."""
     # Full: the bed is parabolic, so a channel runs through every depth from its banks to
     # its centreline rather than being one flat stamp.
     d = demo.water[demo.water > 0.02]
