@@ -16,6 +16,10 @@ Wire format, one JSON object per WebSocket text frame:
 | `truth` | 2 Hz | **ground truth** -- real casualty positions and the true hazard disc |
 | `event` | immediate | one `/swarm/events` message |
 
+Inbound, dashboard -> simulator, the same framing the other way: `drive` and `release`
+(control/manual.py). They are the operator's WASD override of one followed robot, and the
+`state` frame echoes who holds it in `manual`, which is what the dashboard's badge draws.
+
 Robots are sent as a flat array of numbers rather than objects: at 512 robots and 10 Hz
 the object form is ~1 MB/s of JSON, the flat form ~150 KB/s, and Godot parses it with a
 single loop. If that ever bites, the next step is binary packing, not fewer robots.
@@ -38,6 +42,7 @@ import numpy as np
 from ..contracts import topics
 from ..contracts.schemas import DashboardFlight
 from ..contracts.version import SCHEMA_VERSION
+from ..control.manual import ManualOverride
 from ..perception.raster import AppearanceRaster
 from ..sim.robot import CHASSIS_INDEX, LANES
 from ..sim.world import CARRIED, CLEARED, RESCUED
@@ -77,6 +82,10 @@ class BridgeNode:
         self._fog_every = max(1, int(round(tick_hz / fog_hz)))
         self._truth_every = max(1, int(round(tick_hz / truth_hz)))
         self.commands: list[dict] = []
+        #: The operator's WASD override. Here rather than on the Mission because the
+        #: bridge is the only way a command can arrive: `--headless` has no bridge, so
+        #: no evaluation or hash can see this.
+        self.manual = ManualOverride(world)
         server.on_connect = self._greet
         if bus is not None:
             bus.subscribe(topics.SWARM_EVENTS, self._on_event)
@@ -170,7 +179,7 @@ class BridgeNode:
 
     def step(self, world, executor, tracker) -> None:
         if self.server.client_count == 0:
-            self.commands.extend(self.server.poll_commands())
+            self._take_commands(world)
             return
         if world.tick % self._state_every == 0:
             self.server.broadcast(self._state(world, executor, tracker))
@@ -178,7 +187,14 @@ class BridgeNode:
             self.server.broadcast(self._fog(world))
         if world.tick % self._truth_every == 0:
             self.server.broadcast(self._truth(world))
-        self.commands.extend(self.server.poll_commands())
+        self._take_commands(world)
+
+    def _take_commands(self, world) -> None:
+        # In arrival order, so a `release` of the old unit and the first `drive` of the
+        # new one, sent in the same dashboard frame, land on the same tick.
+        for c in self.server.poll_commands():
+            if not self.manual.receive(world, c):
+                self.commands.append(c)
 
     def _state(self, world, executor, tracker) -> dict:
         # 8 columns. chassis is on the wire because locomotion is half of what makes a
@@ -232,6 +248,10 @@ class BridgeNode:
             # many machines are milling about. At most one row per buried casualty (32
             # on the demo map), so tens of bytes in a frame with a 64 KB ceiling.
             "digs": [[round(x, 1), round(y, 1), n] for x, y, n in world.digging],
+            # `[robot index, seconds until autonomy]` while the operator has a unit, else
+            # empty. The simulator's word, so the dashboard's MANUAL badge cannot claim
+            # control the robot is not actually under.
+            "manual": self.manual.wire(world),
         }
 
     def _contacts(self, world, tracker) -> list[list]:

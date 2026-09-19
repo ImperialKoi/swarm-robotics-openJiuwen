@@ -82,12 +82,19 @@ class ReflexController:
     def commands(self, world, nav, goal_xy: list[tuple[float, float]],
                  goal_id: np.ndarray,
                  stop_radius: np.ndarray | None = None,
-                 arrived: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+                 arrived: np.ndarray | None = None,
+                 manual: tuple[int, float, float] | None = None,
+                 ) -> tuple[np.ndarray, np.ndarray]:
         """(v_cmd, omega_cmd) for every robot.
 
         ``goal_xy`` is the list of *distinct* goals this tick; ``goal_id`` is (N,) with
         -1 meaning "no assignment". Grouping by goal is what keeps flow-field cost
         proportional to goals rather than robots.
+
+        ``manual`` is the operator's ``(robot, v, omega)`` from the dashboard override
+        (control/manual.py). It replaces that one robot's goal-seeking command and then
+        meets the wall override like every other command -- a human at the keys is not a
+        way around the safety floor.
         """
         p = self.p
         alive = world.status <= OUT_OF_COMMS
@@ -120,6 +127,10 @@ class ReflexController:
         self.last_arrived = arrived
         v = np.where(arrived, 0.0, v)
 
+        if manual is not None:
+            i, v_op, omega_op = manual
+            v[i] = v_op
+            omega[i] = omega_op
         return self._wall_override(world, v), omega
 
     # ------------------------------------------------------------------ terms
@@ -275,12 +286,17 @@ class ReflexController:
         free direction rather than grinding. World.step's axis-separated collision would
         also prevent penetration; this exists so robots do not *try*, which is both
         visible on the dashboard and a waste of battery.
+
+        The circle is swept the way the robot is moving. Only the operator's override ever
+        reverses, and a floor that only looked ahead would let it back into anything; for
+        every forward command ``sgn`` is 1.0 and this is the original sweep, bit for bit.
         """
         step = v * world.dt * np.where(world.airborne, AIRBORNE_SPEED, 1.0)
         ca, cb = np.cos(world.theta), np.sin(world.theta)
+        sgn = np.where(v < 0.0, -1.0, 1.0)
         blocked = np.zeros(world.n, dtype=bool)
         for frac in (0.5, 1.0):
-            reach = world.radius + step * frac
+            reach = sgn * (world.radius + np.abs(step) * frac)
             ix, iy = grid.world_to_cell(
                 world.pos[:, 0] + reach * ca, world.pos[:, 1] + reach * cb,
                 world.cell, world.shape

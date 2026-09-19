@@ -206,6 +206,24 @@ for a robot destroyed, violet `ISSUED` for a hivemind directive, pink `FILTER` f
 its filter **rejected**. A rejection is a good moment, not a bug — it is the safety net
 catching a bad plan.
 
+### Hazard audio
+
+The hazard has two positional sounds in `godot/audio/sfx/`: SoundReality's landslide
+rumble loops while active, and Floraphonic's gravel slide plays on first appearance
+and every **5 m of additional radius**. The impact layers over the rumble. Both use
+Godot's built-in 3D attenuation from the camera and follow the hazard's reported
+centre at terrain height. Audio is independent of the particle and god-view toggles.
+
+Abandoning the hazard's source sector silences it; reopening resumes the rumble.
+Burnout (zero radius), mission completion, reset and disconnect stop both players.
+Repeated or shrinking radii do not replay impacts. A late connection starts from the
+first received radius; skipped growth steps produce one current impact, without a
+backlog of old sounds.
+
+`scripts/audio_manager.gd` receives the existing dashboard `truth`, `state` and `event`
+messages through `main.gd`. In this build `/world/hazard_zone` is only a declared
+topic; the implemented hazard feed is `truth.hz`. No additional listener is needed.
+
 ---
 
 ## 4. Controls
@@ -216,7 +234,7 @@ catching a bad plan.
 | `G` | **god-view** — removes the fog and shows the truth. For debugging, not for judging |
 | `V` | casualty pins and contact rings |
 | `C` | colour robots by **chassis** instead of job |
-| `S` | hivemind sector tint on/off |
+| `S` | hivemind sector tint on/off. **In POV and chase `S` is reverse** — see *Manual override* below |
 | `P` | particle effects on/off |
 | `H` | switch normal / simulated thermal vision for the followed unit; from orbit, enter POV |
 | `F` | cycle the view of the followed robot: **POV** → **chase** → back to the orbit. One press is first-person from the robot's own eye; two is the close third-person follow camera |
@@ -225,6 +243,7 @@ catching a bad plan.
 | wheel | zoom |
 | drag | orbit |
 | right-drag | pan |
+| `W` `A` `S` `D` / arrows | in POV or chase, **drive the followed unit** — see below |
 
 Every toggle is also a clickable row in the HUD's overlay bus. The top of the view names
 the view you are in — `ORBIT`, `POV` or `CHASE`.
@@ -242,6 +261,30 @@ framing, kept separate from the orbit's so that pressing `F` never loses the wid
 
 Pressing `F` with nothing followed picks the first robot, and clicking another robot
 while in chase snaps straight to it rather than flying across the map.
+
+### Manual override
+
+In POV or chase, `W`/`↑` drives the followed unit forward, `S`/`↓` reverses it (at half
+speed), and `A`/`D` or `←`/`→` turn it. This is layered on the autonomy, not a mode switch:
+
+- **Holding a key takes the unit.** The simulator puts the operator's command in place of
+  that one robot's goal-seeking. It keeps its task, and the rest of the swarm is untouched.
+- **Letting go hands it back.** The unit stops and holds for 1.5 s, so taps are not fought
+  between, then resumes its task from where it was left. There is no release key.
+- **Switching units hands the old one back at once.** Click another robot, press `F` to the
+  orbit, or `Esc`, and the previous unit is autonomous again on the next tick.
+- **The safety floor still applies.** Commands go through Tier 1's wall override like the
+  auction's do. Driving or reversing into a wall stops the unit rather than grinding it.
+
+The badge under the view's top-left corner says who has the unit, read from the
+simulator's echo rather than the keys: `AUTONOMOUS`, `MANUAL · OPERATOR DRIVING`, or
+`MANUAL · HOLDING · AUTONOMY IN 1.2 S`. While the operator has it, the frame corners turn
+amber, and the event stream logs each handover. `NO ACK FROM SIMULATOR` means the keys are
+not reaching a simulator that accepts them, such as an older build.
+
+Only `cli run --demo` accepts these commands. `--headless`, the gate and training have no
+bridge, so the override cannot touch the seed-42 hash. Nothing models the radio link:
+a unit out of comms can still be driven, because the dashboard talks straight to the simulator.
 
 ### Thermal vision
 

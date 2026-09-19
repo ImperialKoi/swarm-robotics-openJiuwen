@@ -82,6 +82,7 @@ const BINDINGS := [
 	["E", "eagle-eye, whole map"],
 	["click", "follow a unit"],
 	["Esc", "release camera"],
+	["WASD", "drive unit (POV / chase)"],
 	["wheel", "zoom"],
 	["drag", "orbit / swing chase"],
 	["R-drag", "pan / reframe"],
@@ -1019,10 +1020,13 @@ func _draw_view(c: Control) -> void:
 		bot + Vector2(w, -strip), bot - Vector2(0, strip)]),
 		PackedColorArray([shade, shade, clear, clear]))
 
-	# Frame corners.
+	# Frame corners. Amber while the operator has the followed unit, so the whole frame says
+	# a hand is on the controls before anyone reads the badge.
 	var inset := _px(0.5)
 	var arm := _px(1.4)
-	var edge := Color(C_ACCENT, 0.5)
+	var dm := _drive_mode()
+	var manual := dm == ManualDrive.Mode.MANUAL or dm == ManualDrive.Mode.HOLDING
+	var edge := Color(C_WARN, 0.9) if manual else Color(C_ACCENT, 0.5)
 	for corner in [[r.position + Vector2(inset, inset), Vector2(1, 1)],
 			[Vector2(r.end.x - inset, r.position.y + inset), Vector2(-1, 1)],
 			[Vector2(r.position.x + inset, r.end.y - inset), Vector2(1, -1)],
@@ -1069,6 +1073,7 @@ func _draw_view(c: Control) -> void:
 	c.draw_string(font, Vector2(x, head_y), left, HORIZONTAL_ALIGNMENT_LEFT, inner, fs, left_ink)
 	c.draw_string(font, Vector2(x, head_y), centre, HORIZONTAL_ALIGNMENT_CENTER, inner, fs, C_ROW)
 	c.draw_string(font, Vector2(x, head_y), right, HORIZONTAL_ALIGNMENT_RIGHT, inner, fs, C_ROW)
+	_draw_drive_badge(c, r)
 
 	var dist := cam.global_position.distance_to(host.cam_target)
 	var vp_h := maxf(host.get_viewport().get_visible_rect().size.y, 1.0)
@@ -1099,6 +1104,46 @@ func _draw_view(c: Control) -> void:
 					if host._on_unit() and host.follow < host.robot_ids.size():
 						label = str(host.robot_ids[host.follow]).to_upper() + " · " + label
 				_draw_reticle(c, p, label)
+
+
+func _drive_mode() -> int:
+	return host.drive.mode() if host.drive != null else ManualDrive.Mode.NONE
+
+
+func _draw_drive_badge(c: Control, r: Rect2) -> void:
+	"""Who is steering the followed unit: its autonomy, or the operator at the keys.
+
+	Read from the simulator's echo (`ManualDrive.mode`), so it reports what the robot is
+	obeying rather than which keys are down. Unit views only, because that is where the keys
+	drive -- a badge in the orbit would offer a control that is not there.
+	"""
+	var m := _drive_mode()
+	if m == ManualDrive.Mode.NONE:
+		return
+	var text := "AUTONOMOUS · WASD TO DRIVE"
+	var ink := C_ACCENT
+	if m == ManualDrive.Mode.MANUAL:
+		text = "MANUAL · OPERATOR DRIVING"
+		ink = C_WARN
+	elif m == ManualDrive.Mode.HOLDING:
+		text = "MANUAL · HOLDING · AUTONOMY IN %.1f S" % host.drive.hold_left()
+		ink = C_WARN
+	elif m == ManualDrive.Mode.NO_ACK:
+		text = "MANUAL REQUESTED · NO ACK FROM SIMULATOR"
+		ink = C_WARN
+	var fs := _fs(0.5)
+	var font := _font(MONO_SEMI, roundi(0.12 * fs))
+	var pad := _px(0.45)
+	var bar := maxf(_px(0.18), 2.0)
+	var size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+	var plate := Rect2(Vector2(r.position.x + _px(2.2), r.position.y + strip_px()),
+		Vector2(bar + size.x + pad * 3.0, font.get_height(fs) + pad * 2.0))
+	# On a backing plate, like the reticle label: bare type over lit rubble disappears.
+	c.draw_rect(plate, Color(C_BG, 0.78), true)
+	c.draw_rect(Rect2(plate.position, Vector2(bar, plate.size.y)), ink, true)
+	var base := Vector2(plate.position.x + bar + pad * 1.5,
+		plate.position.y + pad + font.get_ascent(fs))
+	c.draw_string(font, base, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ink)
 
 
 func _draw_reticle(c: Control, p: Vector2, label: String) -> void:

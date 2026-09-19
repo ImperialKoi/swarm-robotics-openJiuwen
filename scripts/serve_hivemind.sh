@@ -10,10 +10,6 @@ MODEL="${1:-assets/models/hivemind-base.gguf}"
 PORT="${PORT:-8080}"
 CTX_SIZE="${CTX_SIZE:-4096}"
 LLAMA_BIN="${LLAMA_BIN:-llama}"
-LLAMA_TEMPLATE_ARGS=()
-if [ -n "${CHAT_TEMPLATE:-}" ]; then
-  LLAMA_TEMPLATE_ARGS=(--chat-template "$CHAT_TEMPLATE")
-fi
 if ! command -v "$LLAMA_BIN" >/dev/null 2>&1 && [ -x "$HOME/.llama-app/llama" ]; then
   LLAMA_BIN="$HOME/.llama-app/llama"
 fi
@@ -29,4 +25,10 @@ fi
 
 # 4096 covers the original advisor; use CTX_SIZE=8192 for the native response team.
 # --no-webui keeps the footprint down; see MEASUREMENTS.md M-29 (829 MB steady).
-exec "$LLAMA_BIN" serve -m "$MODEL" --port "$PORT" --ctx-size "$CTX_SIZE" --parallel 1 --no-webui --jinja "${LLAMA_TEMPLATE_ARGS[@]}"
+# Keep the array nonempty: macOS Bash 3.2 treats empty arrays as unset under `set -u`.
+LLAMA_ARGS=(serve -m "$MODEL" --port "$PORT" --ctx-size "$CTX_SIZE"
+            --parallel 1 --no-webui --jinja)
+if [ -n "${CHAT_TEMPLATE:-}" ]; then
+  LLAMA_ARGS+=(--chat-template "$CHAT_TEMPLATE")
+fi
+exec "$LLAMA_BIN" "${LLAMA_ARGS[@]}"

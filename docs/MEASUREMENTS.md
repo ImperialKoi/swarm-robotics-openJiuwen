@@ -5375,3 +5375,37 @@ adjustment, all **25 focused flight, determinism, mission and terrain-safety che
 passed as well. The smoke completed t=420 at 18.10× realtime (23.20 wall-seconds),
 with hash `7222837e33e1d4e1`. This is the small `test.yaml` scenario and includes the
 concurrent placement/rescue changes; it is not a demo-map comparison or performance gate.
+
+## M-86 — positional landslide audio
+
+The owner supplied two MP3s and selected a **5 m radius-growth step** for impacts.
+Inspection of the fetched merged `main` (`6dc7e3d`) and available branch history found
+no earlier audio manager. `/world/hazard_zone` is declared but has no publisher;
+the existing dashboard receives the actual centre and radius through `truth.hz`.
+The new dashboard audio manager uses that dispatcher and its existing state/event
+handlers. No simulator, transport or frozen schema change is needed.
+
+| Asset | Duration (`afinfo`) | Compressed audio bytes | Playback |
+|---|---:|---:|---|
+| `soundreality-landslide-128314.mp3` | 22.032 s | 705,024 | looping rumble |
+| `floraphonic-rocks-and-gravel-slide-4-204995.mp3` | 5.256 s | 168,192 | one-shot impact over the rumble |
+
+Both are stereo MP3, 48 kHz, 256 kbps; copied from the owner's Downloads folder into
+`godot/audio/sfx/` with identical SHA-256 checksums. There is no new resident process.
+Both players use built-in camera-relative attenuation at the reported hazard centre.
+
+`godot/tests/audio_check.gd` passes in native Godot 4.7.2 with the dummy audio driver.
+It exercises the actual dashboard dispatcher and imported assets: simultaneous
+rumble/impact, loop rollover and one-shot completion, duplicate ignition and truth
+frames, the 5 m boundaries including
+decimal radii, decay/regrowth, skipped snapshots, unrelated/source-sector abandonment,
+directive expiry, burnout, joining mid-mission, mission completion, reset and
+disconnect. Growth does not restart the rumble. Playback positions verify that
+duplicate frames do not restart either asset. This verifies playback behavior, not
+the audible mix or subjective loop quality; no listening session is claimed.
+
+Validation on the combined checkout: `UV_CACHE_DIR=/private/tmp/swarmmind-uv-cache
+make check` passed lint, **618 tests** (533.58 s), and the seed-42 `test.yaml` smoke.
+The smoke reached t=420 with hash `2e9b29dc80f5b5c2` in 20.67 wall-seconds. This is a
+fixture check, not a demo-map performance comparison; the audio change is confined
+to the dashboard.

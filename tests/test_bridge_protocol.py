@@ -21,6 +21,7 @@ from swarmmind.sim.scenario import Scenario
 ROOT = Path(__file__).resolve().parents[1]
 GD = ROOT / "godot" / "scripts" / "main.gd"
 HUD = ROOT / "godot" / "scripts" / "hud.gd"
+DRIVE = ROOT / "godot" / "scripts" / "manual_drive.gd"
 
 
 @pytest.fixture(scope="module")
@@ -60,7 +61,7 @@ def _keys_read_by_gdscript(handler: str) -> set[str]:
 
 
 def test_gdscript_exists_and_is_tab_indented():
-    for path in (GD, HUD):
+    for path in (GD, HUD, DRIVE):
         src = path.read_text(encoding="utf-8")
         assert src.strip(), f"{path.name} is empty"
         bad = [i + 1 for i, ln in enumerate(src.splitlines())
@@ -765,3 +766,47 @@ def test_particle_bursts_fire_on_real_events():
     assert 'msg.get("pos"' in src and "_fx_burst" in src, (
         "main.gd receives event positions and never fires a burst at them"
     )
+
+
+# --- manual override ------------------------------------------------------------------
+#
+# The only traffic that flows dashboard -> simulator. Both ends are checked against each
+# other here because a mismatch fails silently in the worst way: the keys do nothing and
+# the badge, drawn from the echo, says AUTONOMOUS -- or NO ACK, on stage.
+
+
+def test_state_carries_the_manual_echo_the_badge_is_drawn_from(payloads):
+    assert payloads["state"]["manual"] == [], "nobody is driving, so the echo is empty"
+    assert "manual" in _keys_read_by_gdscript("state"), "main.gd never reads `manual`"
+    src = DRIVE.read_text(encoding="utf-8")
+    # `[robot index, seconds until autonomy]`, indexed positionally by manual_drive.gd.
+    assert "int(_echo[0])" in src and "float(_echo[1])" in src
+
+
+def test_the_drive_messages_the_dashboard_sends_are_the_ones_the_simulator_reads():
+    from swarmmind.control.manual import KINDS
+
+    src = DRIVE.read_text(encoding="utf-8")
+    sent = re.findall(r"host\.send\(\{(.*?)\}\)", src)
+    assert sent, "manual_drive.gd sends nothing through main.gd's socket"
+    kinds = set()
+    for body in sent:
+        keys = re.findall(r'"(\w+)":', body)
+        kind = re.search(r'"t":\s*"(\w+)"', body).group(1)
+        kinds.add(kind)
+        expected = {"t", "robot", "v", "w"} if kind == "drive" else {"t", "robot"}
+        assert set(keys) == expected, f"{kind} sends {sorted(keys)}, control/manual.py reads {sorted(expected)}"
+    assert kinds == set(KINDS), f"dashboard sends {sorted(kinds)}, simulator handles {sorted(KINDS)}"
+    assert re.search(r"^func send\(msg: Dictionary\) -> bool:", GD.read_text(encoding="utf-8"), re.M)
+
+
+def test_the_drive_badge_and_its_modes_agree():
+    """hud.gd names every ManualDrive mode it draws; a renamed mode would be a parse error
+    on the projector, which is the one place Godot gets run."""
+    drive = DRIVE.read_text(encoding="utf-8")
+    modes = re.search(r"enum Mode \{([^}]*)\}", drive)
+    assert modes, "ManualDrive.Mode not found"
+    declared = {m.strip() for m in modes.group(1).split(",") if m.strip()}
+    used = set(re.findall(r"ManualDrive\.Mode\.(\w+)", HUD.read_text(encoding="utf-8")))
+    assert used and used <= declared, f"hud.gd uses modes {sorted(used - declared)} that do not exist"
+    assert "drive.on_state(" in GD.read_text(encoding="utf-8")

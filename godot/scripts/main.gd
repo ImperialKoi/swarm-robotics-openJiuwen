@@ -325,6 +325,9 @@ var god_view := false
 var show_victims := false
 var thermal_on := false
 var thermal: ThermalVision
+#: WASD / arrow-key override of the followed unit -- scripts/manual_drive.gd.
+var drive: ManualDrive
+var audio: SwarmAudio
 var colour_by_chassis := false
 var _drag := false
 var _pan := false
@@ -415,6 +418,12 @@ func _ready() -> void:
 	thermal = ThermalVision.new()
 	add_child(thermal)
 	thermal.setup(self)
+	drive = ManualDrive.new()
+	add_child(drive)
+	drive.setup(self)
+	audio = SwarmAudio.new()
+	add_child(audio)
+	audio.setup(self)
 	_connect_ws()
 
 
@@ -470,6 +479,8 @@ func _process(delta: float) -> void:
 	_now += delta
 	socket.poll()
 	var st := socket.get_ready_state()
+	if st != WebSocketPeer.STATE_OPEN:
+		audio.reset()
 	if st == WebSocketPeer.STATE_OPEN:
 		state_name = "connected"
 		while socket.get_available_packet_count() > 0:
@@ -519,10 +530,14 @@ func _handle(msg: Dictionary) -> void:
 			# Additive contracts.schemas.DashboardFlight; old recordings stay grounded.
 			airborne = msg.get("flight", {}).get("airborne", [])
 			_update_sectors(msg.get("sec", []))
+			audio.on_state(msg.get("sec", []))
 			reports = msg.get("reports", [])
 			_set_digs(msg.get("digs", []))
 			hud = msg.get("hud", {})
 			sim_time = msg.get("time", 0.0)
+			# `[robot index, seconds until autonomy]` while the operator has a unit, else
+			# empty. An older simulator omits it, and a held drive key then reads NO ACK.
+			drive.on_state(msg.get("manual", []))
 			_update_robots(true)
 			_update_markers()
 			ui.on_state()
@@ -535,13 +550,30 @@ func _handle(msg: Dictionary) -> void:
 		"truth":
 			truth_victims = msg.get("v", [])
 			truth_hazard = msg.get("hz", null)
+			audio.on_truth(truth_hazard)
 			_update_markers()
 		"event":
 			_on_event(msg)
 
 
+func link_up() -> bool:
+	return socket.get_ready_state() == WebSocketPeer.STATE_OPEN
+
+
+func send(msg: Dictionary) -> bool:
+	"""One JSON command to the simulator -- the only outbound traffic on the socket.
+
+	Dropped, not queued, while the link is down: every command the dashboard sends is a
+	live control input, and replaying stale ones after a reconnect is worse than losing them.
+	"""
+	if not link_up():
+		return false
+	return socket.send_text(JSON.stringify(msg)) == OK
+
+
 func _on_hello(msg: Dictionary) -> void:
 	# A reconnect/reset starts a fresh trajectory even when the roster is identical.
+	audio.reset()
 	ready_world = false
 	robots.clear()
 	airborne.clear()
@@ -1376,6 +1408,7 @@ const EVENT_COLOURS := {
 
 
 func _on_event(msg: Dictionary) -> void:
+	audio.on_event(msg)
 	var kind := str(msg.get("kind", ""))
 	if kind in EVENT_SUPPRESSED:
 		return
@@ -1784,6 +1817,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_G:
 				toggle("god")
 			KEY_S:
+				# Orbit only in practice: in POV and chase S is reverse, and ManualDrive
+				# takes it in `_input` before it gets here.
 				toggle("sectors")
 			KEY_P:
 				toggle("fx")

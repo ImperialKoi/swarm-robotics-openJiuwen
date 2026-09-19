@@ -251,10 +251,18 @@ class Mission:
             # Out-of-contact inspections are buffered, so shared fog alone would
             # strand a rotor even after its own camera has looked at this cell.
             air &= w.explored[iy, ix] | inspected_here | ~can_land
+        # The operator's WASD override, demo only: the bridge owns it, and headless has no
+        # bridge. A rotor under the keys flies while it is driven and sets down when the
+        # operator stops, if it can -- the landing rules above are where *autonomy* chooses
+        # to look, and holding a driven rotor to them would leave it unable to take off.
+        manual = self.bridge.manual.command(w) if self.bridge is not None else None
+        if manual is not None and self._rotor[manual[0]]:
+            air[manual[0]] = manual[1] != 0.0 or not can_land[manual[0]]
         self._cam_never |= w.airborne & ~air
         w.airborne = air
         # Choose the flight layer BEFORE steering, including the first takeoff tick.
-        v, omega = self.reflex.commands(w, self.nav, goal_xy, goal_id, stop_r, arrived)
+        v, omega = self.reflex.commands(w, self.nav, goal_xy, goal_id, stop_r, arrived,
+                                        manual)
         # A rotor taking a ground camera sample waits for the next sensor pass. It
         # must not crawl through rubble with its landing skids between flights.
         v = np.where(self._rotor & ~air, 0.0, v)

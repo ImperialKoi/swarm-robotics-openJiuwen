@@ -30,6 +30,7 @@ from .robot import (
     LANE_INDEX,
     LANES,
     OUT_OF_COMMS,
+    REVERSE_SPEED,
     RobotSpec,
     evolved_roster,
 )
@@ -535,7 +536,9 @@ class World:
         # A rotor in flight is over the terrain, not on it: no rubble drag, and twice
         # the speed. It pays for that by being blind -- see `Mission._perceive`.
         terrain = np.where(self.airborne, 1.0, terrain)
-        v = np.clip(v_cmd, 0.0, self.v_max) * terrain * payload * alive
+        # Reverse exists for the operator's manual override alone; nothing autonomous
+        # commands a negative speed, so for the swarm this is the old [0, v_max] clip.
+        v = np.clip(v_cmd, -REVERSE_SPEED * self.v_max, self.v_max) * terrain * payload * alive
         v = np.where(self.airborne, v * AIRBORNE_SPEED, v)
 
         # --- translation, axis-separated so robots slide along walls -------------
@@ -570,7 +573,7 @@ class World:
         # --- battery -------------------------------------------------------------
         drain = (
             self.scn.battery.idle
-            + self.scn.battery.moving * (v / np.maximum(self.v_max, 1e-9))
+            + self.scn.battery.moving * (np.abs(v) / np.maximum(self.v_max, 1e-9))
             + self.scn.hazard.battery_drain * in_hazard
         ) * dt * alive
         drain = drain / np.maximum(self.battery_cap, 1e-9)

@@ -54,6 +54,11 @@ GROUND_CHASSIS: tuple[str, ...] = ("wheeled", "tracked", "legged")
 #: look, and hand the find to the diggers and carriers over the comms net.
 AIRBORNE_SPEED = 2.0
 
+#: Top reverse speed as a fraction of forward. Only the operator's manual override ever
+#: reverses (control/manual.py) -- Tier 1 turns to face its goal and never commands a
+#: negative speed -- so for every autonomous robot the old [0, v_max] clip is unchanged.
+REVERSE_SPEED = 0.5
+
 #: A rotor cannot carry a casualty, so it is never given the gripper actuator.
 CHASSIS_BARRED: dict[str, frozenset[str]] = {"gripper": frozenset({"rotor"})}
 
