@@ -5409,3 +5409,45 @@ make check` passed lint, **618 tests** (533.58 s), and the seed-42 `test.yaml` s
 The smoke reached t=420 with hash `2e9b29dc80f5b5c2` in 20.67 wall-seconds. This is a
 fixture check, not a demo-map performance comparison; the audio change is confined
 to the dashboard.
+
+## M-87 — hosted model moved to OpenRouter (openJiuwen team + hivemind API rung)
+
+The owner supplied an OpenRouter key (`sk-or-v1-…`) and asked to switch the hosted model
+from the direct OpenAI endpoint to it. openJiuwen itself issues no keys; it is the agent
+SDK the native team already runs on, and it lists `OpenRouter` among its client providers.
+Endpoint is now `https://openrouter.ai/api/v1/chat/completions`, key `OPENROUTER_API_KEY`,
+model `openai/gpt-4.1-mini` (the same model). The key lives only in the gitignored `.env`.
+
+OpenRouter serves this model from three hosts (OpenAI, two Azure regions), all listing
+`structured_outputs`. Every OpenRouter request sets `provider.require_parameters` so it is
+never routed to a host that would drop the JSON schema. No host lists
+`parallel_tool_calls`, which openJiuwen sends from the team's request config: with
+`require_parameters` every native call failed **HTTP 404, "No endpoints found that can
+handle the requested parameters"**. The adapter already sends no tools, so it now omits
+that field. Found by a live call; the HTTP test double cannot show it.
+
+All runs below: this laptop, `test.yaml`, seed 42, realtime. Wiring and latency only —
+no demo-map run, no rescue-uplift claim.
+
+| Check | Result |
+|---|---|
+| Hivemind API rung, 40 sim-s (`--demo --hivemind-allow-api`) | 7/7 cycles answered by `api`; 0 timed out / errored / unparseable / fell through; latency **850–1,330 ms** |
+| Native team, 65 sim-s (`--demo --response-team`) | 4 episodes: 3 applied, 1 rejected by the final filter (no fresh in-contact unit); 0 fallbacks; 16 calls, 7,373 tokens; applied-episode latency 3.5–6.9 s; 1.00× realtime |
+| `check_response_team.py --runtime local` | **PASS** — logistics revised the lead's A1 to B1, safety approved |
+| `check_response_team.py --runtime workswarm` (native), twice | **FAIL** both times — the lead chose the feasible B1 on its first call, so there was nothing for logistics to revise; 4 calls, 1,365 tokens each |
+
+The native FAIL is recorded, not tuned away: the fixture is a trap for a lead that picks
+unsupported rescue demand, and this model did not take it. It says nothing about whether
+peer revision happens on real maps. Historical local-Qwen native episodes took 12.4–17.1 s
+(M-82) on the seed-42 demo map; the figures above are the fixture and not a like-for-like
+comparison.
+
+Team orders were published with `source: "base-local"` even when hosted. They now use the
+frozen contract's `"api"` for the OpenRouter endpoint (loopback keeps `base-local`).
+
+Validation: lint clean; **624 passed, 2 failed** in 409.65 s. The two failures are
+`test_native_burial_*` and `test_native_thermal_*`, 30 s timeouts inside headless Godot 4.7.2.
+They fail identically without this change. Three more native-Godot tests failed on this checkout
+until the gitignored class cache was built (`Godot --headless --path godot --import`). The isolated
+SDK suite passed 5 coordination cases and 2 worker requests. The `test.yaml` seed-42 smoke hash
+is unchanged at `2e9b29dc80f5b5c2` (headless never calls a model).

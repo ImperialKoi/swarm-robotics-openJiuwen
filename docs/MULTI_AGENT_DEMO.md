@@ -22,41 +22,47 @@ WorkSwarm **0.2.6** and its resolved dependencies are pinned in
 [`requirements.lock`](../integrations/workswarm/requirements.lock), in a separate
 `integrations/workswarm/.venv`. The core environment does not import WorkSwarm. The
 lock was verified on macOS arm64 / Python 3.12; other platforms are unverified.
-Installation and OpenAI inference need network access. The scripted fallback works
+Installation and OpenRouter inference need network access. The scripted fallback works
 without a model connection. The first framework import has a separate startup budget.
 
-The default model is `gpt-4.1-mini`, configured in `assets/scenarios/team_response.yaml`.
-Set `OPENAI_MODEL` to override it with a compatible Chat Completions model supporting
-strict structured outputs. Keys are read only from `OPENAI_API_KEY`; no key belongs in
-YAML, source files, trace logs, or Git. `.env` files are ignored, but are not loaded automatically.
-The local GGUF launcher is an optional legacy path and is not needed for OpenAI.
+Inference goes through **OpenRouter** (`https://openrouter.ai/api/v1`, OpenAI-compatible).
+The default model is `openai/gpt-4.1-mini`, the same model as before, configured in
+`assets/scenarios/team_response.yaml`. Set `OPENROUTER_MODEL` to override it with an
+OpenRouter model supporting strict structured outputs. Keys are read only from
+`OPENROUTER_API_KEY`; no key belongs in YAML, source files, trace logs, or Git. Every
+OpenRouter request sets `provider.require_parameters`, so it is only routed to hosts that
+honour the JSON schema. `.env` is gitignored and is not loaded implicitly; pass it with
+`uv run --env-file .env` (template: `.env.example`).
+The local GGUF launcher is an optional legacy path and is not needed for OpenRouter.
 
 ## Run the real application
 
-In PowerShell, enter a replacement API key without echoing it or putting it in shell history:
+Put the key in `.env` (`OPENROUTER_API_KEY=sk-or-v1-...`), then:
 
-```powershell
-$credential = Read-Host 'OpenAI API key' -AsSecureString
-$env:OPENAI_API_KEY = [System.Net.NetworkCredential]::new('', $credential).Password
-uv run python -m swarmmind.cli run --demo --response-team --team-trace runs/team/live.jsonl
+```bash
+uv run --env-file .env python -m swarmmind.cli run --demo --response-team --team-trace runs/team/live.jsonl
 ```
 
 For the regular single-provider hivemind:
 
-```powershell
-uv run python -m swarmmind.cli run --demo --hivemind-allow-api
+```bash
+uv run --env-file .env python -m swarmmind.cli run --demo --hivemind-allow-api
 ```
+
+The team worker inherits the environment, so the key reaches it without extra flags.
+In PowerShell, set `$env:OPENROUTER_API_KEY` instead of using `--env-file`.
 
 The native team still requires its isolated WorkSwarm environment. On Windows supply
 `--team-python integrations/workswarm/.venv/Scripts/python.exe` if that is where the
 framework was installed; the original setup script targets macOS/Linux.
-`--response-team local` uses the simpler role workflow with the same configured OpenAI
+`--response-team local` uses the simpler role workflow with the same configured OpenRouter
 endpoint; the legacy mode name describes the workflow, not where inference runs.
 `--headless` stays model-free, and `--response-team heuristic` needs no API key.
 
 Historical examples and measurements below used Qwen. They are retained as historical
-evidence, not validation of the OpenAI configuration. Live OpenAI quality and latency
-have not yet been measured.
+evidence, not validation of the hosted configuration. The first live OpenRouter checks
+are in [M-87](MEASUREMENTS.md): wiring and latency on the `test.yaml` fixture only, not
+rescue uplift or demo-map quality.
 
 Open `godot/` in Godot and run its main scene. Keep terminal 2 beside it: the dashboard
 shows sector effects, while the terminal shows the role handoffs and proposal IDs.
@@ -113,14 +119,17 @@ is explicit because this SDK version does not inherit it from the team model poo
 Our rescue tools wrap native task creation/completion and constrain candidate selection.
 SDK rails enforce each role's permissions, compact prompts and bound model calls.
 A small client extension registered through the SDK subclasses `OpenAIModelClient`:
-it requests JSON-schema-constrained arguments from local Qwen, validates them, and
+it requests JSON-schema-constrained arguments from the configured model, validates them, and
 returns an SDK `ToolCall`. This works around the installed llama.cpp build ignoring
 required-tool selection. It does not choose arguments, invent votes, or execute tools;
 the native runtime remains responsible for coordination and execution. The four model
-responses are real local inference. Native SDK tests use an explicitly labeled HTTP
-response fixture instead.
-`api_key="local-no-secret"` is a placeholder required by the compatible client, not a
-cloud credential. The native runtime invokes each agent's registered model client;
+responses are real inference (OpenRouter by default). Native SDK tests use an explicitly
+labeled HTTP response fixture instead. The adapter sends no tools, so it also drops
+`parallel_tool_calls`; no OpenRouter host accepts that field, and with
+`require_parameters` it made every route fail with HTTP 404 (M-87).
+With a loopback endpoint, `api_key="local-no-secret"` is a placeholder required by the
+compatible client, not a cloud credential. Reviewed team orders are published with
+source `api` for the hosted endpoint and `base-local` for loopback. The native runtime invokes each agent's registered model client;
 application orchestration does not call teammates directly. The old SwarmFlow
 `AgentBackend` is not used on this path. The prior `swarmflow.py` is historical only.
 
@@ -131,7 +140,7 @@ filesystem, shell, browser, MCP, evolution and fork capabilities are disabled or
 by the tool allowlist. A temporary SQLite task database is removed after each episode;
 previous observed outcomes cross episodes through the next snapshot.
 
-Roles share one local model server with separate contexts and authority. Logistics can
+Roles share one model endpoint with separate contexts and authority. Logistics can
 change the recommendation, safety can veto it, and the leader must accept the exact
 verified choice. A final simulator filter still checks age and current feasibility.
 The earlier M-79 traces used SwarmFlow; they are **not native Leader/Teammate evidence**.
@@ -198,8 +207,9 @@ establish real-model quality.
   No agent controls individual motors, bypasses reflexes, or adds a task directly.
 - Model timeouts, runtime errors and worker termination leave the scripted advisor and
   autonomous auction running. Headless runs never accidentally pick up a live model.
-- Local generation is not byte-deterministic. Trace paths are overwritten on startup;
-  use distinct paths to retain multiple rehearsals. No API key or cloud model is used.
+- Model generation is not byte-deterministic. Trace paths are overwritten on startup;
+  use distinct paths to retain multiple rehearsals. The hosted model needs network and
+  `OPENROUTER_API_KEY`; without either, the scripted advisor takes over.
 
 ## Current build
 

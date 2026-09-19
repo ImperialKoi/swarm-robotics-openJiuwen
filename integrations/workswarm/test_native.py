@@ -37,6 +37,7 @@ class ModelStub(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         assert not body.get("tools"), "the model adapter constrains arguments with JSON schema"
+        assert "provider" not in body, "OpenRouter routing is never sent to a loopback server"
         name = body["response_format"]["json_schema"]["name"]
         self.server.calls.append(name)
         if name == "verify_task":

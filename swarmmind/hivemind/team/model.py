@@ -1,10 +1,10 @@
-"""Bounded OpenAI/loopback JSON client, without general tools or simulator access."""
+"""Bounded OpenRouter/loopback JSON client, without general tools or simulator access."""
 
 import json
 import time
 import urllib.request
 
-from ..providers.openai_api import response_text
+from ..providers.openai_api import response_text, routing
 from .workflow import ROLES
 
 
@@ -37,6 +37,7 @@ class LocalModel:
                 {"role": "user", "content": json.dumps(context, separators=(",", ":"))}],
             "response_format": {"type": "json_schema", "json_schema": {
                 "name": "role_choice", "strict": True, "schema": choice_schema(count)}},
+            **routing(self.config.model_url),
         }
         request = urllib.request.Request(self.config.model_url,
                                          data=json.dumps(body).encode(),

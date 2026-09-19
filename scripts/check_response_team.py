@@ -2,7 +2,8 @@
 """Real-model peer-revision check over a labeled synthetic observation fixture.
 
 This does not run a mission or dispatch its synthetic observations to any robot.
-Start scripts/serve_hivemind.sh first. No API or external network is used.
+Uses the configured team endpoint: OpenRouter needs OPENROUTER_API_KEY and network
+(`uv run --env-file .env ...`); a loopback URL needs scripts/serve_hivemind.sh first.
 """
 
 import argparse

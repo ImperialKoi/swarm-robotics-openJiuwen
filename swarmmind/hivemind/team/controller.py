@@ -7,6 +7,7 @@ from collections import deque
 from pathlib import Path
 
 from ...contracts import topics
+from ..providers.openai_api import OPENROUTER_URL
 from .client import WorkerClient
 from .config import ROOT, TeamConfig
 from .observations import capture, observe_event
@@ -133,7 +134,8 @@ class ResponseTeam:
             self.trace.record("rejected", request=request, reason="stale or changed observations",
                             age=age, check=check, evidence_valid=evidence_ok)
             return
-        source = "scripted" if self.mode == "heuristic" else "base-local"
+        hosted = self.config.model_url == OPENROUTER_URL
+        source = "scripted" if self.mode == "heuristic" else "api" if hosted else "base-local"
         reasoning = (f"Response team reviewed {directive['action']} in {directive['sector']}; "
                      f"evidence {result['evidence']}; logistics and safety passed.")
         accepted = hivemind.apply_reviewed(
