@@ -16,6 +16,7 @@ from typing import Any
 
 import numpy as np
 
+from ..contracts.schemas import OPERATOR_ACTION
 from ..rng import RngBook
 from . import grid
 from . import terrain as terrain_gen
@@ -29,6 +30,7 @@ from .robot import (
     DESTROYED,
     LANE_INDEX,
     LANES,
+    OPERATOR_SPEED,
     OUT_OF_COMMS,
     REVERSE_SPEED,
     RobotSpec,
@@ -410,7 +412,7 @@ class World:
         self.robot_ids = [s.id for s in self.specs]
         self.actuator = np.array([LANE_INDEX[s.actuator] for s in self.specs], dtype=np.int8)
         self.radius = np.array([s.radius for s in self.specs])
-        self.v_max = np.array([s.v_max for s in self.specs])
+        self.v_max = np.array([s.v_max for s in self.specs]) * self.scn.robot_speed_multiplier
         self.omega_max = np.array([s.omega_max for s in self.specs])
         self.sensor_radius = np.array([s.sensor_radius for s in self.specs])
         self.chassis = np.array([CHASSIS_INDEX[s.chassis] for s in self.specs], dtype=np.int8)
@@ -437,6 +439,15 @@ class World:
         self.battery = np.ones(n)
         self.status = np.full(n, ACTIVE, dtype=np.int8)
         self.carrying = np.full(n, -1, dtype=np.int32)
+        #: Per-robot multiplier on the commanded speed ceiling. Ones for the swarm; the
+        #: operator's override raises it for the one robot it holds (`set_operator`).
+        #: Nothing sets it without a dashboard, so headless clips exactly as before.
+        self.speed_boost = np.ones(n)
+        #: The robot the dashboard's operator is driving, or -1. See `set_operator`.
+        self.operator = -1
+        #: A driven rotor the operator has told to hold its height. Read by `Mission`,
+        #: which owns the airborne decision; toggled by the action key.
+        self.operator_hover = False
         #: Robots currently on the pad, so the recharge event fires once per visit.
         self._charging = np.zeros(n, dtype=bool)
         self.in_comms = np.ones(n, dtype=bool)
@@ -580,7 +591,11 @@ class World:
         terrain = np.where(self.airborne, 1.0, terrain)
         # Reverse exists for the operator's manual override alone; nothing autonomous
         # commands a negative speed, so for the swarm this is the old [0, v_max] clip.
-        v = np.clip(v_cmd, -REVERSE_SPEED * self.v_max, self.v_max) * terrain * payload * alive
+        # The ceiling is per-robot because the operator's unit is allowed past its own
+        # rating (robot.py `OPERATOR_SPEED`). `speed_boost` is all ones everywhere else,
+        # so this is the old clip bit for bit for every autonomous robot.
+        cap = self.v_max * self.speed_boost
+        v = np.clip(v_cmd, -REVERSE_SPEED * cap, cap) * terrain * payload * alive
         v = np.where(self.airborne, v * AIRBORNE_SPEED, v)
 
         # --- translation, axis-separated so robots slide along walls -------------
@@ -942,6 +957,13 @@ class World:
                     alive & (self.actuator == LANE_INDEX["gripper"])
                     & (self.carrying < 0) & (d2 <= REACH_GRAB ** 2)
                 )
+                # The unit the operator is driving picks up when they press the key, not
+                # by walking past. Not a flourish: `operator_act` lets them set a
+                # casualty down, and a robot that re-grabbed it on the next tick would
+                # make that key look broken. Digging has no such conflict and is left
+                # automatic. Autonomy resumes the moment the lease lapses.
+                if self.operator >= 0:
+                    free_grippers[self.operator] = False
                 if free_grippers.any():
                     i = int(np.argmin(np.where(free_grippers, d2, np.inf)))
                     v.state, v.carrier = CARRIED, i
@@ -963,6 +985,102 @@ class World:
                                    f"{v.id} extracted by {self.robot_ids[i]}",
                                    victim=v.id, robot=self.robot_ids[i], pos=(zx, zy))
                         break
+
+    # ------------------------------------------------------------------ the operator
+
+    def set_operator(self, i: int) -> None:
+        """Hand the operator's lease to robot ``i``, or -1 for nobody.
+
+        `control.manual.ManualOverride` owns the lease and calls this once a tick. The
+        world has to hold it because two things *inside* the tick turn on it -- the speed
+        ceiling in `step` and the automatic pickup in `_update_victims` -- and neither can
+        reach up into the bridge to ask.
+
+        Nothing calls this without a dashboard attached, so `speed_boost` stays all ones
+        and both branches are dead code in headless, the gate and every rollout.
+        """
+        if i == self.operator:
+            return
+        if self.operator >= 0:
+            self.speed_boost[self.operator] = 1.0
+        if i >= 0:
+            self.speed_boost[i] = OPERATOR_SPEED
+        # A new unit starts under its own lane's rules, not the last one's: letting the
+        # hover latch carry over would hand the next robot a state nobody chose for it.
+        self.operator_hover = False
+        self.operator = i
+
+    def operator_offer(self, i: int) -> int:
+        """The `OPERATOR_ACTION` code the action key would perform on robot ``i`` now.
+
+        The dashboard's hint is drawn from this and `operator_act` performs exactly the
+        action it named, so the label and the key cannot disagree -- a key that offers
+        PICK UP and then does nothing is worse than a key that offers nothing.
+        """
+        return self._operator_action(i)[0]
+
+    def operator_act(self, i: int) -> int:
+        """Perform the operator's action on robot ``i``. The code performed, 0 for none.
+
+        Emitted, like every other change to a casualty's state -- the operator picking
+        one up is exactly as much a part of the mission's story as a carrier doing it.
+        """
+        code, vi = self._operator_action(i)
+        rid = self.robot_ids[i] if 0 <= i < self.n else "?"
+        if code == OPERATOR_ACTION["set_down"]:
+            v = self.victims[vi]
+            v.pos = self.pos[i].copy()
+            v.state, v.carrier = CLEARED, -1
+            self.carrying[i] = -1
+            self._emit("operator_action", f"{rid} set {v.id} down in {self._sector_at(v.pos)}",
+                       robot=rid, victim=v.id, sector=self._sector_at(v.pos), pos=tuple(v.pos))
+        elif code == OPERATOR_ACTION["pick_up"]:
+            v = self.victims[vi]
+            v.state, v.carrier = CARRIED, i
+            self.carrying[i] = vi
+            self._emit("operator_action", f"{rid} picked up {v.id} in {self._sector_at(v.pos)}",
+                       robot=rid, victim=v.id, sector=self._sector_at(v.pos), pos=tuple(v.pos))
+        elif code in (OPERATOR_ACTION["take_off"], OPERATOR_ACTION["land"]):
+            # The latch only; `Mission` owns the airborne array and reads it next tick.
+            self.operator_hover = code == OPERATOR_ACTION["take_off"]
+            what = "took off" if self.operator_hover else "landed"
+            self._emit("operator_action", f"{rid} {what} in {self._sector_at(self.pos[i])}",
+                       robot=rid, sector=self._sector_at(self.pos[i]), pos=tuple(self.pos[i]))
+        return code
+
+    def _operator_action(self, i: int) -> tuple[int, int]:
+        """``(OPERATOR_ACTION code, victim index)``; the index is -1 where there is none.
+
+        Ground truth is read here and nowhere above it. The operator's unit gets the
+        reach its own autonomy already has and not a metre more -- `_update_victims`
+        grabs at exactly `REACH_GRAB` -- so the key is a trigger for a rule the swarm
+        already follows, not a longer arm.
+        """
+        if not (0 <= i < self.n) or self.status[i] > OUT_OF_COMMS:
+            return OPERATOR_ACTION["none"], -1
+        held = int(self.carrying[i])
+        if held >= 0:
+            return OPERATOR_ACTION["set_down"], held
+        if self.chassis[i] == CHASSIS_INDEX["rotor"]:
+            # A rotor can never hold a casualty (robot.py `CHASSIS_BARRED`), so its key
+            # is its height. It may not set down anywhere its autonomy could not: over a
+            # river the offer is nothing at all rather than a landing that cannot happen.
+            if not self.airborne[i]:
+                return OPERATOR_ACTION["take_off"], -1
+            return (OPERATOR_ACTION["land"], -1) if self.can_land()[i] \
+                else (OPERATOR_ACTION["none"], -1)
+        if self.actuator[i] != LANE_INDEX["gripper"]:
+            return OPERATOR_ACTION["none"], -1
+        best, best_d2 = -1, REACH_GRAB ** 2
+        for vi, v in enumerate(self.victims):
+            if v.state != CLEARED:
+                continue
+            d2 = float((self.pos[i, 0] - v.pos[0]) ** 2 + (self.pos[i, 1] - v.pos[1]) ** 2)
+            if d2 <= best_d2:
+                best, best_d2 = vi, d2
+        if best < 0:
+            return OPERATOR_ACTION["none"], -1
+        return OPERATOR_ACTION["pick_up"], best
 
     def _has_los(self, i: int, target: np.ndarray) -> bool:
         """Line of sight from robot ``i`` to a world point. Walls block, rubble does not."""

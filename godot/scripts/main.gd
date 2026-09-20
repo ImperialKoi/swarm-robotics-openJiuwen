@@ -25,6 +25,9 @@ const LANE_COLORS := [
 ]
 const LANE_NAMES := ["scout", "digger", "carrier", "relay"]
 const CHASSIS_NAMES := ["wheeled", "tracked", "legged", "rotor"]
+#: The rotor's index in the line above, which three things turn on: whether a unit can be
+#: in the air, whether its camera is worth aiming, and therefore who owns the arrow keys.
+const CHASSIS_ROTOR := 3
 #: Colour normally encodes the *job*. `C` switches it to encode *locomotion* instead,
 #: which is the view that answers "is it always the wheeled ones getting stuck?".
 const CHASSIS_COLORS := [
@@ -310,6 +313,24 @@ const CHASE_CLEAR := 0.7
 const CHASE_POS_RATE := 14.0
 const CHASE_YAW_RATE := 5.0
 
+#: Where a drone's first-person camera is looking, relative to the unit's own heading:
+#: (yaw, pitch) in radians, both zero for everything else. The arrow keys move it --
+#: see `_camera_keys` for why a rotor is the one chassis that gets them.
+var pov_look := Vector2.ZERO
+#: Which robot `pov_look` belongs to, so swinging the camera round one drone does not
+#: leave the next unit picked up staring off at nothing.
+var _pov_of := -1
+#: Radians a second the arrow keys swing a drone's camera. Slower than a mouse drag on
+#: purpose: a key held is a shot being composed, not a glance.
+const CAM_KEY_YAW := 1.2
+const CAM_KEY_PITCH := 0.9
+#: How far a drone's own view may look off its heading. Short of the tail on both sides:
+#: past that its own rotor booms fill the frame and the horizon it is flying against is
+#: gone, which is the thing the shot is for.
+const POV_LOOK_YAW := 2.2
+const POV_LOOK_DOWN := -1.1
+const POV_LOOK_UP := 0.6
+
 #: Drag offset from *behind the unit's heading*, not an absolute compass bearing -- so
 #: the camera keeps its shot as the robot turns instead of being left staring at a flank.
 var chase_yaw := 0.0
@@ -500,6 +521,7 @@ func _process(delta: float) -> void:
 			socket = WebSocketPeer.new()
 			_connect_ws()
 
+	_camera_keys(delta)
 	_update_camera(delta)
 	if ready_world:
 		var full_terrain := view_mode != View.ORBIT and _on_unit()
@@ -727,7 +749,7 @@ func _robot_flight_pose(x: float, y: float, heading: float, chassis: int) -> Tra
 
 func _is_airborne(i: int) -> bool:
 	return i >= 0 and i < robots.size() and i < airborne.size() and bool(airborne[i]) \
-		and int(robots[i][6]) == 3 and int(robots[i][4]) < 2
+		and int(robots[i][6]) == CHASSIS_ROTOR and int(robots[i][4]) < 2
 
 
 func _unit_pose(i: int, detailed: bool = false) -> Transform3D:
@@ -1407,6 +1429,9 @@ const EVENT_COLOURS := {
 	"directive_rejected": "#ff78d2",
 	"sector_abandoned": "#ffd24a",
 	"hivemind_offline": "#8790a1",
+	# The operator's own hands on one unit. The same amber the drive badge and the
+	# "operator driving" log line use, so everything they do reads as one voice.
+	"operator_action": "#ffbf3d",
 }
 
 
@@ -1523,7 +1548,10 @@ func _draw_detector(c: Control) -> void:
 	# Bore sight, first person only. At the window centre, not the hole's: that is the
 	# camera's optical axis, which is where the robot is looking. From the robot's own eye the screen centre is where
 	# the robot is looking; from the chase camera it is just the middle of a picture.
-	if view_mode == View.POV:
+	# Not while a drone's camera is swung off its heading: the screen centre is then the
+	# camera's axis and not the robot's, and a cross drawn there claims a bore sight the
+	# unit does not have.
+	if view_mode == View.POV and pov_look == Vector2.ZERO:
 		var mid: Vector2 = vp * 0.5
 		c.draw_line(mid - Vector2(9, 0), mid - Vector2(3, 0), faint, 1.0)
 		c.draw_line(mid + Vector2(3, 0), mid + Vector2(9, 0), faint, 1.0)
@@ -1691,6 +1719,64 @@ func _chase_active() -> bool:
 	return view_mode == View.CHASE and _on_unit()
 
 
+func followed_is_drone() -> bool:
+	"""Whether the unit the camera is on is a rotor.
+
+	The arrow keys turn on this and nothing else: on a drone they aim the camera
+	(`_camera_keys`), on every other chassis they stay the drive keys' second home
+	(manual_drive.gd `ARROW_KEYS`). Read off the state frame's chassis column rather than
+	guessed from the lane -- a rotor is never a carrier, but it can be any other lane.
+	"""
+	return _on_unit() and int(robots[follow][6]) == CHASSIS_ROTOR
+
+
+func _pov_bind(i: int) -> void:
+	"""Point the first-person camera straight down unit `i`'s nose when it is a new unit.
+
+	The aim belongs to the drone the operator swung it on, not to the view: carrying it
+	to the next unit picked would leave a ground robot's POV staring off at a flank with
+	no key on the keyboard able to straighten it, since the arrows are not that unit's.
+	"""
+	if _pov_of == i:
+		return
+	_pov_of = i
+	pov_look = Vector2.ZERO
+
+
+func _camera_keys(delta: float) -> void:
+	"""The arrow keys aim a drone's camera. Drones only, and only in a unit view.
+
+	A ground unit looks where it is going, which is what the POV already shows and what
+	the drive keys already control. A drone does not: it crosses ground at 2x, it is
+	blind until it lands, and the whole reason to put one under the keys is to fly it
+	somewhere and *look* -- so it is the one chassis where aiming the camera is a second
+	control worth having, and the one that can spare the arrows to do it.
+
+	Both views take the keys, and each moves the rig it already has, so a key and a mouse
+	drag cannot end up disagreeing about where the camera is.
+	"""
+	if view_mode == View.ORBIT or not followed_is_drone():
+		return
+	var yaw := (1.0 if Input.is_physical_key_pressed(KEY_RIGHT) else 0.0) \
+		- (1.0 if Input.is_physical_key_pressed(KEY_LEFT) else 0.0)
+	var tilt := (1.0 if Input.is_physical_key_pressed(KEY_UP) else 0.0) \
+		- (1.0 if Input.is_physical_key_pressed(KEY_DOWN) else 0.0)
+	if yaw == 0.0 and tilt == 0.0:
+		return
+	if view_mode == View.POV:
+		pov_look.x = clampf(pov_look.x + yaw * CAM_KEY_YAW * delta,
+			-POV_LOOK_YAW, POV_LOOK_YAW)
+		pov_look.y = clampf(pov_look.y + tilt * CAM_KEY_PITCH * delta,
+			POV_LOOK_DOWN, POV_LOOK_UP)
+	else:
+		# Unbounded like the drag, which walks all the way round the unit on purpose.
+		chase_yaw += yaw * CAM_KEY_YAW * delta
+		# Up tilts the *shot* up, which drops the camera below the unit -- so it is the
+		# opposite sign to `chase_pitch`, which is how high the eye sits. Same limits as
+		# the drag, whose floor dips just under the anchor for the shot against the sky.
+		chase_pitch = clampf(chase_pitch - tilt * CAM_KEY_PITCH * delta, -0.10, 1.35)
+
+
 func _update_camera(delta: float) -> void:
 	if not ready_world:
 		return
@@ -1702,8 +1788,17 @@ func _update_camera(delta: float) -> void:
 		var r: Array = robots[follow]
 		var pose := _unit_pose(follow, true)
 		var eye := pose.origin + Vector3.UP * 1.1
-		var th := float(r[2])
-		var ahead := eye + Vector3(cos(th), -0.12, sin(th)) * 14.0
+		_pov_bind(follow)
+		# Yaw rides on the unit's own heading, so a drone swung 90 degrees off its nose
+		# keeps that shot as it flies rather than being dragged back round. At
+		# `pov_look == ZERO` -- which is every unit but a drone under the arrow keys --
+		# this is the original eye vector untouched, the one render3d.py signed off on.
+		var th := float(r[2]) + pov_look.x
+		var look := Vector3(cos(th), -0.12, sin(th))
+		if pov_look.y != 0.0:
+			# About the camera's own right, so the horizon stays level however far round.
+			look = look.rotated(look.cross(Vector3.UP).normalized(), pov_look.y)
+		var ahead := eye + look * 14.0
 		cam.position = eye
 		cam.look_at(ahead, Vector3.UP)
 		cam.fov = 74.0
@@ -1791,6 +1886,10 @@ func _reset_chase() -> void:
 	chase_dist = CHASE_DIST
 	chase_pan = Vector3.ZERO
 	_chase_of = -1
+	# The first-person aim goes with it: both are the operator's framing of one unit, and
+	# leaving one behind is how a camera ends up pointing somewhere nobody chose.
+	pov_look = Vector2.ZERO
+	_pov_of = -1
 
 
 func _eagle_eye() -> void:

@@ -16,9 +16,10 @@ Wire format, one JSON object per WebSocket text frame:
 | `truth` | 2 Hz | **ground truth** -- real casualty positions and the true hazard disc |
 | `event` | immediate | one `/swarm/events` message |
 
-Inbound, dashboard -> simulator, the same framing the other way: `drive` and `release`
-(control/manual.py). They are the operator's WASD override of one followed robot, and the
-`state` frame echoes who holds it in `manual`, which is what the dashboard's badge draws.
+Inbound, dashboard -> simulator, the same framing the other way: `drive`, `act` and
+`release` (control/manual.py). They are the operator's WASD override of one followed
+robot, and the `state` frame echoes who holds it in `manual`, which is what the
+dashboard's badge draws -- including what the action key would do next.
 
 Robots are sent as a flat array of numbers rather than objects: at 512 robots and 10 Hz
 the object form is ~1 MB/s of JSON, the flat form ~150 KB/s, and Godot parses it with a
@@ -248,9 +249,10 @@ class BridgeNode:
             # many machines are milling about. At most one row per buried casualty (32
             # on the demo map), so tens of bytes in a frame with a 64 KB ceiling.
             "digs": [[round(x, 1), round(y, 1), n] for x, y, n in world.digging],
-            # `[robot index, seconds until autonomy]` while the operator has a unit, else
-            # empty. The simulator's word, so the dashboard's MANUAL badge cannot claim
-            # control the robot is not actually under.
+            # `[robot index, seconds until autonomy, action code]` while the operator
+            # has a unit, else empty. The simulator's word, so the dashboard's MANUAL
+            # badge cannot claim control the robot is not actually under -- nor offer an
+            # action key that would do nothing. The code is `OPERATOR_ACTION`.
             "manual": self.manual.wire(world),
         }
 

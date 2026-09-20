@@ -1,0 +1,27 @@
+{
+  "scenario": "demo",
+  "seed": 42,
+  "tick": 0,
+  "robots": 512,
+  "speed_multiplier": 1.2,
+  "lanes": {
+    "none": {
+      "before_median_m_s": 1.8760150393776398,
+      "after_median_m_s": 2.2512180472531678
+    },
+    "scoop": {
+      "before_median_m_s": 0.6433785054736808,
+      "after_median_m_s": 0.772054206568417
+    },
+    "gripper": {
+      "before_median_m_s": 1.8305718989618462,
+      "after_median_m_s": 2.1966862787542154,
+      "before_loaded_median_m_s": 1.2814003292732923,
+      "after_loaded_median_m_s": 1.5376803951279507
+    },
+    "antenna": {
+      "before_median_m_s": 1.4779715257502852,
+      "after_median_m_s": 1.7735658309003421
+    }
+  }
+}

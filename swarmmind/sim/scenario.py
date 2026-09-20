@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -155,6 +156,12 @@ class Scenario:
     lane_counts: dict[str, int] = field(default_factory=dict)
     #: The maps the demo plays (`demo.yaml`). Empty for scenarios that are not a demo.
     demo_seeds: tuple[int, ...] = ()
+    #: Scale physical translation speeds without changing the mission clock or roster.
+    robot_speed_multiplier: float = 1.0
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.robot_speed_multiplier) or self.robot_speed_multiplier <= 0:
+            raise ValueError("robot_speed_multiplier must be finite and positive")
 
     # --- derived ------------------------------------------------------------------
 
@@ -246,4 +253,5 @@ class Scenario:
             mission_duration_s=float(raw["mission_duration_s"]),
             bid_weights=dict(raw.get("bid_weights", {})),
             demo_seeds=tuple(int(v) for v in (raw.get("demo_seeds") or ())),
+            robot_speed_multiplier=float(raw.get("robot_speed_multiplier", 1.0)),
         )

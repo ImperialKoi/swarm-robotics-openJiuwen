@@ -59,6 +59,22 @@ AIRBORNE_SPEED = 2.0
 #: negative speed -- so for every autonomous robot the old [0, v_max] clip is unchanged.
 REVERSE_SPEED = 0.5
 
+#: How much faster than its own rating a robot moves while the operator is driving it
+#: (control/manual.py). A concession to the demo, not a property of the body: these are
+#: 0.9-2.0 m/s machines on a 480x320 m map, and at the rated speed the digger a judge
+#: takes the keys to crosses one sector in the time they have to watch it.
+#:
+#: Applied to exactly one robot at a time, only through the bridge, so no evaluation,
+#: gate or seed-42 hash can see it -- `World.speed_boost` is all ones without a
+#: dashboard attached. The safety floor is unaffected: `_wall_override` sweeps the
+#: *commanded* distance, so a faster robot simply sweeps further, and at 20 Hz the
+#: fastest boosted ground unit steps 0.20 m against a 0.5 m cell -- still two samples
+#: inside every cell it enters.
+#:
+#: It stacks with `AIRBORNE_SPEED`, so a driven rotor in flight moves at 4x its rating.
+#: That is deliberate: flying one across the map is the shot this is for.
+OPERATOR_SPEED = 2.0
+
 #: A rotor cannot carry a casualty, so it is never given the gripper actuator.
 CHASSIS_BARRED: dict[str, frozenset[str]] = {"gripper": frozenset({"rotor"})}
 

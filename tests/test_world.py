@@ -9,7 +9,7 @@ import pytest
 
 from swarmmind.control.wander import wander
 from swarmmind.sim import grid
-from swarmmind.sim.robot import DESTROYED, LANE_INDEX, LANES
+from swarmmind.sim.robot import AIRBORNE_SPEED, CHASSIS_INDEX, DESTROYED, LANE_INDEX, LANES
 from swarmmind.sim.scenario import Scenario
 from swarmmind.sim.world import World
 
@@ -81,16 +81,45 @@ def test_victims_respect_min_separation(world, scn):
     assert d.min() >= scn.victims.min_separation_m - 1e-6
 
 
-def test_robots_never_penetrate_walls(scn):
+@pytest.mark.parametrize("speed", [1.0, 1.2])
+def test_robots_never_penetrate_walls(scn, speed):
     """Tier 1 is the safety floor (CLAUDE.md #2), but the collision response in World
     must hold even under the D1 wander controller, which has no avoidance at all."""
-    w = World(scn, 7)
+    w = World(dataclasses.replace(scn, robot_speed_multiplier=speed), 7)
     rng = w.rng["noise"]
     for _ in range(int(60 * scn.rates.tick_hz)):
         v, omega = wander(w, rng)
         w.step(v, omega)
         ix, iy = grid.world_to_cell(w.pos[:, 0], w.pos[:, 1], w.cell, w.shape)
         assert not (w.occ[iy, ix] == grid.WALL).any(), f"wall penetration at t={w.t:.2f}"
+
+
+@pytest.mark.parametrize("evolved", [False, True])
+def test_speed_multiplier_moves_loaded_ground_and_aircraft_faster(scn, evolved):
+    """Faster physical travel keeps payload/terrain costs and the real sim clock."""
+    worlds = [World(dataclasses.replace(scn, robot_speed_multiplier=speed), 42,
+                    evolved=evolved) for speed in (1.0, 1.2)]
+    np.testing.assert_array_equal(worlds[0].pos, worlds[1].pos)
+    moves = []
+    for w in worlds:
+        w.occ[:] = grid.RUBBLE
+        w.chassis_passable[:] = True
+        w.pos[:] = (45.0, 32.0)  # clear of either extraction zone
+        w.theta[:] = 0.0
+        flying = w.chassis == CHASSIS_INDEX["rotor"]
+        w.airborne[:] = flying
+        carrier = int(np.flatnonzero(w.actuator == LANE_INDEX["gripper"])[0])
+        w.carrying[carrier] = 0
+        w.victims[0].state, w.victims[0].carrier = 3, carrier  # CARRIED
+        w.step(w.v_max.copy(), np.zeros(w.n))
+        dx = w.pos[:, 0] - 45.0
+        moves.append(dx)
+        assert w.t == scn.dt
+        assert dx[carrier] == pytest.approx(
+            w.v_max[carrier] * scn.dt * grid.RUBBLE_SPEED_FACTOR *
+            scn.victims.carry_speed_factor)
+        np.testing.assert_allclose(dx[flying], w.v_max[flying] * scn.dt * AIRBORNE_SPEED)
+    np.testing.assert_allclose(moves[1], moves[0] * 1.2)
 
 
 def test_hazard_ignites_on_schedule(scn):

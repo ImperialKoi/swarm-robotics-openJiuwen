@@ -86,7 +86,7 @@ def _apply_morphology(world, genome, mine: np.ndarray) -> None:
     for i in np.nonzero(mine)[0]:
         spec = decode_spec(genome, world.robot_ids[i], CHASSIS[int(world.chassis[i])])
         world.radius[i] = spec.radius
-        world.v_max[i] = spec.v_max
+        world.v_max[i] = spec.v_max * world.scn.robot_speed_multiplier
         world.omega_max[i] = spec.omega_max
         world.sensor_radius[i] = spec.sensor_radius
         world.battery_cap[i] = spec.battery_capacity

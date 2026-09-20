@@ -118,6 +118,7 @@ extraction_zones: [[111.0, 72.0], [196.0, 26.0], [48.0, 96.0], [40.0, 141.0],
 extraction_radius: 6.0
 
 robots_per_lane: 128           # 512 total; roster unchanged for the new crop
+robot_speed_multiplier: 1.20   # 20% faster travel, including loaded carriers; same sim clock
 
 # Lane sizes are NOT even, and the even split was costing the mission.
 #

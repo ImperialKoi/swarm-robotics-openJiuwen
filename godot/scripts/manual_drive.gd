@@ -1,7 +1,7 @@
 class_name ManualDrive
 extends Node
 ##
-## Manual override: WASD or the arrow keys drive the followed unit, on top of its autonomy.
+## Manual override: WASD drives the followed unit, on top of its autonomy, and space acts.
 ##
 ## Layered on the swarm, not in place of it. Commands go to the simulator, which puts them
 ## in place of that one robot's goal-seeking *before* the Tier 1 wall override
@@ -18,14 +18,30 @@ extends Node
 ##
 ## Driving needs a unit view, POV or chase. In the orbit, S is still the sector toggle.
 ##
-## The badge that says who has the unit is drawn by hud.gd from `mode()`, next to the
-## rest of the viewport frame's readouts.
+## **Space is the action key, and the simulator decides what it does.** Whether there is a
+## casualty within reach is a ground-truth question, so this script may not answer it and
+## must not guess: a press sends `act` naming only the unit, and `World.operator_act`
+## chooses between picking a casualty up, setting one down, and taking a rotor off or
+## landing it. The same call fills in `manual[2]` of every state frame, which is what the
+## badge offers -- so the label and the key cannot come apart.
+##
+## The badge that says who has the unit is drawn by hud.gd from `mode()` and `action()`,
+## next to the rest of the viewport frame's readouts.
 
 #: Physical keys, so the diamond sits under the same fingers on any keyboard layout.
 const KEYS_FWD := [KEY_W, KEY_UP]
 const KEYS_BACK := [KEY_S, KEY_DOWN]
 const KEYS_LEFT := [KEY_A, KEY_LEFT]
 const KEYS_RIGHT := [KEY_D, KEY_RIGHT]
+#: One press, one action. Polled like the rest, not bound in `_input`, so it can only
+#: fire on a unit this script is actually allowed to drive.
+const KEY_ACT := KEY_SPACE
+#: The arrow keys among the four above. **On a drone they belong to the camera instead**
+#: (main.gd `_camera_keys`) and this script must not read them: a drone is the one unit
+#: where it is pointed and where it is worth looking are different questions, and
+#: swinging the camera round a hovering rotor must not also yaw the rotor out from under
+#: it. On every other chassis they stay what they have always been -- WASD's other home.
+const ARROW_KEYS := [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]
 
 #: Fraction of the unit's own turn rate that A/D ask for. Full rate is 2.0-3.5 rad/s: a
 #: scout at full rate turns 200 degrees a second, which from its own eye is a blur.
@@ -48,8 +64,10 @@ var _v := 0.0
 var _w := 0.0
 var _since_send := 0.0
 var _unacked := 0.0
+#: True while the action key is down, so one press is one action rather than sixty.
+var _acting := false
 #: The simulator's `manual` field from the last state frame: `[robot index, seconds until
-#: autonomy resumes]`, or empty when nobody is being driven.
+#: autonomy resumes, action code]`, or empty when nobody is being driven.
 var _echo: Array = []
 
 
@@ -80,6 +98,25 @@ func driven() -> int:
 func hold_left() -> float:
 	"""Seconds until the simulator hands the driven unit back to its autonomy."""
 	return float(_echo[1]) if _echo.size() >= 2 else 0.0
+
+
+func action() -> int:
+	"""What the simulator says the action key would do to the driven unit right now: an
+	`OPERATOR_ACTION` code from swarmmind/contracts/schemas.py, 0 for nothing.
+
+	Its word and not ours. The dashboard cannot see a casualty until the swarm reports
+	one, and offering a key that turns out to do nothing is worse than offering none.
+	"""
+	return int(_echo[2]) if _echo.size() >= 3 else 0
+
+
+func camera_owns_arrows() -> bool:
+	"""Whether the arrow keys are the camera's this frame rather than the drive's.
+
+	Asked of the host, not worked out here: `main.gd` owns the followed unit and reads
+	its chassis off the state frame.
+	"""
+	return host != null and host.followed_is_drone()
 
 
 func mode() -> int:
@@ -132,8 +169,13 @@ func _process(delta: float) -> void:
 		_bound = want
 		_held = false
 		_unacked = 0.0
+		# A key already down when the view arrives is not a press on the new unit. Without
+		# this, clicking through a line of carriers with space held would empty every one
+		# of them onto the ground on the way past.
+		_acting = Input.is_physical_key_pressed(KEY_ACT)
 	if _bound < 0:
 		return
+	_act()
 	# A positive turn rate swings the heading from sim +x toward sim +y, and sim +y is
 	# Godot +z -- the right-hand side of a unit facing +x (world_to_godot). So positive is
 	# a right turn on screen, and D sends it. Worked from `_update_camera`'s POV basis.
@@ -152,6 +194,19 @@ func _process(delta: float) -> void:
 	_held = held
 
 
+func _act() -> void:
+	"""Send one `act` on the frame the key goes down, and nothing while it is held.
+
+	No keep-alive and no stop: unlike a drive this is an event, not a state, and the
+	simulator renews the hold on it by itself so the swarm does not reclaim the unit
+	between an operator's presses.
+	"""
+	var down := Input.is_physical_key_pressed(KEY_ACT)
+	if down and not _acting:
+		host.send({"t": "act", "robot": host.robot_ids[_bound]})
+	_acting = down
+
+
 func _drive(v: float, w: float) -> void:
 	_v = v
 	_w = w
@@ -160,11 +215,18 @@ func _drive(v: float, w: float) -> void:
 
 
 func _is_drive_key(k: int) -> bool:
+	if k == KEY_ACT:
+		return true
+	if k in ARROW_KEYS and camera_owns_arrows():
+		return false
 	return k in KEYS_FWD or k in KEYS_BACK or k in KEYS_LEFT or k in KEYS_RIGHT
 
 
 func _any(keys: Array) -> bool:
+	var arrows_taken := camera_owns_arrows()
 	for k in keys:
+		if arrows_taken and k in ARROW_KEYS:
+			continue
 		if Input.is_physical_key_pressed(k):
 			return true
 	return false

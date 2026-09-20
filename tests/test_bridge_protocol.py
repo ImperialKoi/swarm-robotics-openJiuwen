@@ -779,8 +779,53 @@ def test_state_carries_the_manual_echo_the_badge_is_drawn_from(payloads):
     assert payloads["state"]["manual"] == [], "nobody is driving, so the echo is empty"
     assert "manual" in _keys_read_by_gdscript("state"), "main.gd never reads `manual`"
     src = DRIVE.read_text(encoding="utf-8")
-    # `[robot index, seconds until autonomy]`, indexed positionally by manual_drive.gd.
-    assert "int(_echo[0])" in src and "float(_echo[1])" in src
+    # `[robot index, seconds until autonomy, action code]`, indexed positionally by
+    # manual_drive.gd. The third field is what the badge offers the action key for, and a
+    # dashboard that stopped reading it would silently offer nothing on every unit.
+    assert "int(_echo[0])" in src and "float(_echo[1])" in src and "int(_echo[2])" in src
+
+
+def test_the_manual_echo_is_the_shape_the_dashboard_indexes():
+    """Three fields, and the third is a code the dashboard has a label for.
+
+    The echo is built by hand rather than through a model, so nothing but this stops it
+    going back to two fields -- which fails in the quiet way: `action()` returns 0, the
+    badge offers nothing, and the key still works for whoever thinks to press it.
+    """
+    from swarmmind.contracts.schemas import OPERATOR_ACTION
+    from swarmmind.control.manual import ManualOverride
+    from swarmmind.sim.scenario import Scenario
+    from swarmmind.sim.world import World
+
+    w = World(Scenario.load("test"), 42)
+    manual = ManualOverride(w)
+    assert manual.wire(w) == [], "nobody is driving"
+    manual.receive(w, {"t": "drive", "robot": w.robot_ids[0], "v": 1.0, "w": 0.0})
+    echo = manual.wire(w)
+    assert len(echo) == 3, f"the badge indexes three fields, the echo has {len(echo)}"
+    assert echo[0] == 0 and echo[1] > 0.0
+    assert echo[2] in set(OPERATOR_ACTION.values())
+
+
+def test_the_action_labels_match_the_dashboard():
+    """A code hud.gd cannot name is a key the operator is told does the wrong thing.
+
+    The same cross-check ACTIVITY and EVENT_COLOURS get. `ACTION_LABELS` is subscripted
+    by the code, so it has to be a dense 0..n array in the table's own order.
+    """
+    from swarmmind.contracts.schemas import OPERATOR_ACTION
+
+    body = re.search(r"const ACTION_LABELS := \[(.*?)\]", HUD.read_text(encoding="utf-8"))
+    assert body, "ACTION_LABELS not found in hud.gd"
+    labels = re.findall(r'"([^"]*)"', body.group(1))
+    assert sorted(OPERATOR_ACTION.values()) == list(range(len(OPERATOR_ACTION))), (
+        "OPERATOR_ACTION must be a dense 0..n index -- it is an array subscript in hud.gd")
+    assert len(labels) == len(OPERATOR_ACTION), (
+        f"hud.gd labels {len(labels)} actions, the simulator can send "
+        f"{len(OPERATOR_ACTION)}: {sorted(OPERATOR_ACTION.items())}")
+    assert labels[OPERATOR_ACTION["none"]] == "", "`none` must draw nothing at all"
+    assert all(labels[code] for name, code in OPERATOR_ACTION.items() if name != "none"), (
+        "every action the simulator can offer needs a label on the badge")
 
 
 def test_the_drive_messages_the_dashboard_sends_are_the_ones_the_simulator_reads():
@@ -795,6 +840,9 @@ def test_the_drive_messages_the_dashboard_sends_are_the_ones_the_simulator_reads
         kind = re.search(r'"t":\s*"(\w+)"', body).group(1)
         kinds.add(kind)
         expected = {"t", "robot", "v", "w"} if kind == "drive" else {"t", "robot"}
+        # `act` and `release` name a unit and nothing else: what the action does is the
+        # simulator's to decide, and a dashboard that sent its own answer could offer a
+        # casualty it has no way of knowing is there.
         assert set(keys) == expected, f"{kind} sends {sorted(keys)}, control/manual.py reads {sorted(expected)}"
     assert kinds == set(KINDS), f"dashboard sends {sorted(kinds)}, simulator handles {sorted(KINDS)}"
     assert re.search(r"^func send\(msg: Dictionary\) -> bool:", GD.read_text(encoding="utf-8"), re.M)

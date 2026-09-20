@@ -1,0 +1,38 @@
+uv run ruff check swarmmind tests scripts
+All checks passed!
+uv run pytest
+........................................................................ [ 10%]
+........................................................................ [ 21%]
+........................................................................ [ 32%]
+........................................................................ [ 43%]
+........................................................................ [ 54%]
+........................................................................ [ 65%]
+........................................................................ [ 76%]
+........................................................................ [ 87%]
+........................................................................ [ 98%]
+........                                                                 [100%]
+=============================== warnings summary ===============================
+tests/test_generator.py::test_sampled_scenarios_are_winnable[3]
+  /Users/daniel/Downloads/swarm-robotics-openJiawen/.venv/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:3862: RuntimeWarning: Mean of empty slice
+    return _methods._mean(a, axis=axis, dtype=dtype,
+
+tests/test_generator.py::test_sampled_scenarios_are_winnable[3]
+  /Users/daniel/Downloads/swarm-robotics-openJiawen/.venv/lib/python3.12/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in divide
+    ret = ret.dtype.type(ret / rcount)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+656 passed, 2 warnings in 684.81s (0:11:24)
+uv run python -m swarmmind.cli run --headless --scenario test --seed 42
+
+  SwarmMind scorecard  seed=42  t=420.0s
+  ------------------------------------------------------------
+  victims rescued     4/8
+  victims found       4/8
+  ground explored     82.7%
+  robots lost         3/16
+  mean time to rescue 236.5s
+  energy used         8.43
+  directives          17 issued, 0 rejected
+  wall / rtf          25.62s / 16.39x
+  hash                a7cb3f81ea18f690
+

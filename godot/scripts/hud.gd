@@ -83,10 +83,18 @@ const BINDINGS := [
 	["click", "follow a unit"],
 	["Esc", "release camera"],
 	["WASD", "drive unit (POV / chase)"],
+	["Space", "act: what the badge offers"],
+	["arrows", "drive · aim camera on a drone"],
 	["wheel", "zoom"],
 	["drag", "orbit / swing chase"],
 	["R-drag", "pan / reframe"],
 ]
+
+#: What the action key would do, indexed by the `OPERATOR_ACTION` code the simulator puts
+#: in `manual[2]`. **Mirrors OPERATOR_ACTION in swarmmind/contracts/schemas.py**, order
+#: and all, and test_bridge_protocol.py compares the two -- a code this side cannot name
+#: is a key the operator is told does something other than what it does.
+const ACTION_LABELS := ["", "PICK UP", "SET DOWN", "TAKE OFF", "LAND"]
 
 #: What replaced the mock's "solver diagnostics": what the swarm is doing, one row per
 #: activity code, in the order a casualty moves through them -- with idle last, because
@@ -131,6 +139,7 @@ const EVENT_TAGS := {
 	"directive_rejected": "FILTER",
 	"sector_abandoned": "SECTOR",
 	"hivemind_offline": "OFFLINE",
+	"operator_action": "MANUAL",
 }
 #: The Tier 3 kinds, which also go to the hivemind panel. Its reasoning is the line a
 #: judge actually reads, and in the main stream it scrolls away under ten dismissals a
@@ -1131,6 +1140,7 @@ func _draw_drive_badge(c: Control, r: Rect2) -> void:
 	elif m == ManualDrive.Mode.NO_ACK:
 		text = "MANUAL REQUESTED · NO ACK FROM SIMULATOR"
 		ink = C_WARN
+	text += _action_hint()
 	var fs := _fs(0.5)
 	var font := _font(MONO_SEMI, roundi(0.12 * fs))
 	var pad := _px(0.45)
@@ -1144,6 +1154,25 @@ func _draw_drive_badge(c: Control, r: Rect2) -> void:
 	var base := Vector2(plate.position.x + bar + pad * 1.5,
 		plate.position.y + pad + font.get_ascent(fs))
 	c.draw_string(font, base, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ink)
+
+
+func _action_hint() -> String:
+	"""What space would do to this unit, appended to the drive badge -- or nothing.
+
+	The simulator's answer, not ours: whether a casualty is within reach of the gripper is
+	a question only the world can settle, and it is the same call that performs the action
+	when the key goes down, so the badge cannot offer something the key will not do.
+
+	Nothing offered means nothing shown. A key advertised over a unit that cannot use it
+	is the one thing worse than a key nobody finds -- and every unit spends most of its
+	time with nothing in reach.
+	"""
+	if host.drive == null:
+		return ""
+	var code := host.drive.action()
+	if code <= 0 or code >= ACTION_LABELS.size():
+		return ""
+	return " · SPACE: " + ACTION_LABELS[code]
 
 
 func _draw_reticle(c: Control, p: Vector2, label: String) -> void:

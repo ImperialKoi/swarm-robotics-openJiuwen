@@ -252,12 +252,18 @@ class Mission:
             # strand a rotor even after its own camera has looked at this cell.
             air &= w.explored[iy, ix] | inspected_here | ~can_land
         # The operator's WASD override, demo only: the bridge owns it, and headless has no
-        # bridge. A rotor under the keys flies while it is driven and sets down when the
-        # operator stops, if it can -- the landing rules above are where *autonomy* chooses
-        # to look, and holding a driven rotor to them would leave it unable to take off.
+        # bridge. A driven rotor's height is the operator's to choose and nobody else's:
+        # the action key latches it airborne and sets it down again (`World.operator_act`),
+        # and the landing rules above are where *autonomy* chooses to look, which would
+        # otherwise leave a driven rotor unable to take off. It still cannot land where
+        # autonomy could not -- over water it stays up.
+        #
+        # The latch replaced an implicit "airborne while a key is held". That version made
+        # the drive keys a throttle and left the operator with no way to keep a drone up
+        # while looking around it, which is the whole point of having one under the keys.
         manual = self.bridge.manual.command(w) if self.bridge is not None else None
         if manual is not None and self._rotor[manual[0]]:
-            air[manual[0]] = manual[1] != 0.0 or not can_land[manual[0]]
+            air[manual[0]] = w.operator_hover or not can_land[manual[0]]
         self._cam_never |= w.airborne & ~air
         w.airborne = air
         # Choose the flight layer BEFORE steering, including the first takeoff tick.

@@ -53,10 +53,13 @@ func run() -> void:
 	d.set_process(false)
 	var drive: ManualDrive = d.drive
 	drive.set_process(false)
-	d.robot_ids = ["r00", "r01", "r02"]
+	# r00/r01 are wheeled (chassis 0), r02 is destroyed, r03 is a rotor (chassis 3) --
+	# the one chassis the arrow keys belong to the camera on.
+	d.robot_ids = ["r00", "r01", "r02", "r03"]
 	d.robots = [[10.0, 10.0, 0.0, 0, 0, 1.0, 0, 2],
 		[20.0, 10.0, 0.0, 0, 0, 1.0, 0, 2],
-		[30.0, 10.0, 0.0, 0, 3, 0.0, 0, 0]]
+		[30.0, 10.0, 0.0, 0, 3, 0.0, 0, 0],
+		[40.0, 10.0, 0.0, 0, 0, 1.0, 3, 2]]
 	d.follow = 0
 	await process_frame
 
@@ -114,7 +117,8 @@ func run() -> void:
 	assert(drive.mode() == ManualDrive.Mode.AUTO)
 	await _draw_hud(d)
 
-	# The arrow keys are the same controls.
+	# The arrow keys are the same controls -- on a ground unit.
+	assert(not d.followed_is_drone())
 	_key(KEY_DOWN, true)
 	_key(KEY_LEFT, true)
 	drive._process(0.016)
@@ -122,6 +126,65 @@ func run() -> void:
 	_key(KEY_DOWN, false)
 	_key(KEY_LEFT, false)
 	drive._process(0.016)
+
+	# Space is one action per press: one `act` on the way down, nothing while held.
+	var n_act := d.sent.size()
+	_key(KEY_SPACE, true)
+	drive._process(0.016)
+	assert(d.sent.back() == {"t": "act", "robot": "r00"})
+	assert(d.sent.size() == n_act + 1)
+	drive._process(0.2)
+	assert(d.sent.size() == n_act + 1)
+	_key(KEY_SPACE, false)
+	drive._process(0.016)
+	assert(d.sent.size() == n_act + 1)
+
+	# What the badge offers comes from the simulator's echo and nowhere else.
+	assert(drive.action() == 0)
+	drive.on_state([0, 1.5, 1])
+	assert(drive.action() == 1 and drive.driven() == 0 and drive.hold_left() == 1.5)
+	await _draw_hud(d)
+	drive.on_state([0, 1.5])
+	assert(drive.action() == 0)          # an older simulator offers nothing, not garbage
+
+	# On a drone the arrow keys are the camera's, and the drive must not read them.
+	d.follow = 3
+	drive._process(0.016)
+	drive.on_state([3, 1.5, 3])
+	assert(d.followed_is_drone() and drive.camera_owns_arrows())
+	n_act = d.sent.size()
+	_key(KEY_LEFT, true)
+	_key(KEY_UP, true)
+	drive._process(0.016)
+	assert(d.sent.size() == n_act, "the arrow keys drove a drone")
+	assert(drive.mode() == ManualDrive.Mode.HOLDING)
+	var aim := d.pov_look
+	d._camera_keys(0.1)
+	assert(d.pov_look.x < aim.x and d.pov_look.y > aim.y, "the arrows did not aim the camera")
+	# ...while WASD still flies it.
+	_key(KEY_W, true)
+	drive._process(0.016)
+	assert(d.sent.back() == {"t": "drive", "robot": "r03", "v": 1.0, "w": 0.0})
+	_key(KEY_W, false)
+	_key(KEY_LEFT, false)
+	_key(KEY_UP, false)
+	drive._process(0.016)
+
+	# The chase rig takes the same keys, and the aim is dropped with the unit.
+	d.view_mode = SwarmDashboard.View.CHASE
+	var yaw := d.chase_yaw
+	_key(KEY_RIGHT, true)
+	d._camera_keys(0.1)
+	assert(d.chase_yaw > yaw)
+	_key(KEY_RIGHT, false)
+	d.view_mode = SwarmDashboard.View.POV
+	d.follow = 0
+	# What `_update_camera` does on the first frame of a new unit. Called directly: the
+	# camera itself wants a terrain surface, and this check has no world.
+	d._pov_bind(d.follow)
+	assert(d.pov_look == Vector2.ZERO, "a ground unit inherited a drone's camera angle")
+	drive._process(0.016)
+	drive.on_state([0, 1.5, 0])
 
 	# Switching units with a key held: release the old one, drive the new one, one frame.
 	_key(KEY_W, true)
@@ -140,10 +203,11 @@ func run() -> void:
 	_key(KEY_W, false)
 	drive._process(0.016)
 
-	# A destroyed unit is not drivable.
+	# A destroyed unit is not drivable, and offers no action either.
 	d.view_mode = SwarmDashboard.View.CHASE
 	d.follow = 2
 	assert(drive.target() == -1)
+	assert(not d.followed_is_drone())
 
 	# A simulator that never confirms is reported, not papered over.
 	d.follow = 0

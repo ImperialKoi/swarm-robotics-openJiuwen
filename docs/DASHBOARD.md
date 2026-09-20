@@ -243,7 +243,9 @@ topic; the implemented hazard feed is `truth.hz`. No additional listener is need
 | wheel | zoom |
 | drag | orbit |
 | right-drag | pan |
-| `W` `A` `S` `D` / arrows | in POV or chase, **drive the followed unit** — see below |
+| `W` `A` `S` `D` | in POV or chase, **drive the followed unit** — see below |
+| `Space` | the followed unit's **action**: pick a casualty up, set it down, take a drone off or land it. The badge says which |
+| arrows | the same four drive keys — **except on a drone**, where they aim its camera instead |
 
 Every toggle is also a clickable row in the HUD's overlay bus. The top of the view names
 the view you are in — `ORBIT`, `POV` or `CHASE`.
@@ -269,12 +271,59 @@ speed), and `A`/`D` or `←`/`→` turn it. This is layered on the autonomy, not
 
 - **Holding a key takes the unit.** The simulator puts the operator's command in place of
   that one robot's goal-seeking. It keeps its task, and the rest of the swarm is untouched.
+- **The driven unit runs at twice its rating.** These are 0.9–2.0 m/s machines on a
+  480 × 320 m map, and at the rated speed a judge who takes the keys to a digger watches it
+  cross one sector. The boost is the operator's, not the body's: exactly one robot has it,
+  for exactly as long as the lease is held (`OPERATOR_SPEED` in `sim/robot.py`).
 - **Letting go hands it back.** The unit stops and holds for 1.5 s, so taps are not fought
   between, then resumes its task from where it was left. There is no release key.
 - **Switching units hands the old one back at once.** Click another robot, press `F` to the
   orbit, or `Esc`, and the previous unit is autonomous again on the next tick.
 - **The safety floor still applies.** Commands go through Tier 1's wall override like the
   auction's do. Driving or reversing into a wall stops the unit rather than grinding it.
+
+### The action key
+
+`Space` is one key and the simulator decides what it does, because the dashboard cannot
+see a casualty the swarm has not reported. The badge always names what the next press
+will do, and it is the same call that performs it, so the two cannot come apart:
+
+| the unit | `Space` does |
+|---|---|
+| a carrier with a cleared casualty within 2 m | `PICK UP` |
+| a carrier holding one | `SET DOWN`, here, wherever here is |
+| a drone on the ground | `TAKE OFF` |
+| a drone in the air over ground it can land on | `LAND` |
+| anything else | nothing, and the badge offers nothing |
+
+**A carrier under the keys does not pick casualties up by itself.** Autonomy's automatic
+pickup is suspended for that one robot while the lease is held — without that, a casualty
+set down would be snatched straight back on the next tick and the key would look broken.
+Digging is unaffected: it has no such conflict and stays automatic. The moment the lease
+lapses, the robot picks up the way the rest of the swarm does.
+
+A drone's height is the key's alone while it is driven. `W` does not take it off — a
+landed rotor does not taxi — so the order is `Space`, then fly. It will not set down
+anywhere its autonomy could not either: over a river it stays up and the badge offers
+nothing. Let go of the unit and its autonomy takes its height back.
+
+Every press is logged to the event stream as `MANUAL`.
+
+### Flying a drone
+
+A rotor is the one chassis where the direction it is pointed and the direction worth
+looking are different questions — it crosses ground at 2× and sees nothing until it
+lands — so it is the one chassis that gives the arrow keys to the camera:
+
+| | |
+|---|---|
+| `←` `→` | swing the view around the unit's heading. In POV up to ±2.2 rad off the nose; in chase, all the way round |
+| `↑` `↓` | tilt the shot up and down |
+| `W` `A` `S` `D` | still fly it |
+
+The aim rides on the unit's heading, so a drone swung 90° off its nose keeps that shot as
+it flies. It is dropped when the camera moves to another unit, and by `E` and `Esc`. On
+every other chassis the arrows are what they have always been: the drive keys' second home.
 
 The badge under the view's top-left corner says who has the unit, read from the
 simulator's echo rather than the keys: `AUTONOMOUS`, `MANUAL · OPERATOR DRIVING`, or

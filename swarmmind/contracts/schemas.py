@@ -31,7 +31,7 @@ EventKind = Literal[
     "victim_found", "victim_cleared", "victim_rescued", "report_dismissed",
     "task_created", "task_awarded", "task_orphaned", "task_completed",
     "robot_destroyed", "robot_out_of_comms", "robot_reconnected", "robot_recharged",
-    "hazard_ignited", "sector_abandoned",
+    "hazard_ignited", "sector_abandoned", "operator_action",
     "directive_issued", "directive_rejected", "hivemind_offline",
     "mission_complete",
 ]
@@ -60,6 +60,24 @@ ACTIVITY: dict[str, int] = {
     "retreat": 9,
     "recover": 10,      # out of contact, closing on the nearest link
     "recharge": 11,
+}
+
+#: What the operator's action key would do to the unit they are driving, as a small int
+#: on the wire -- the third field of a state frame's `manual` (nodes/bridge.py).
+#:
+#: **The simulator decides, the dashboard only draws it.** Whether a casualty is within
+#: reach is a ground-truth question, so the dashboard cannot answer it and must not
+#: guess: a key that offers "PICK UP" and then does nothing is worse than no hint.
+#: `World.operator_offer` fills this in and `World.operator_act` performs exactly the
+#: action it named.
+#:
+#: hud.gd has the same table as ACTION_LABELS, cross-checked by test_bridge_protocol.py.
+OPERATOR_ACTION: dict[str, int] = {
+    "none": 0,          # nothing in reach, or this unit cannot do anything here
+    "pick_up": 1,       # a carrier over a casualty that is clear of debris
+    "set_down": 2,      # a carrier holding one: put it down here
+    "take_off": 3,      # a landed rotor
+    "land": 4,          # a rotor in flight, over ground it can set down on
 }
 
 #: actuator -> the display label the dashboard and the original spec use.

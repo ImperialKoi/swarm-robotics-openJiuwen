@@ -150,6 +150,7 @@ These numbers live in `assets/scenarios/demo.yaml`. The Nepal crop uses referenc
 | Terrain | Two headwaters joining one outlet; 14–22 m channels, wooded shoulders, small terrace settlements and debris fans. Water and slope gate chassis access |
 | Base / extraction | base `(30, 40)`; 11 further collection points on connected terrace roads |
 | Robots | **512** — 171 / 117 / 96 / 128 by lane |
+| Travel speed | **1.20×** roster speeds, including loaded carriers; the owner's target is most rescues by t=180 s, pending a live demo measurement |
 | Casualties | **110** total, **44 buried**, `distance_weight_exp` 0.4 (M-17, M-52) |
 | Sim tick | 20 Hz · fog/LOS 5 Hz |
 | Auction cycle | 1 Hz (announce → 0.3 s bid window → award) |

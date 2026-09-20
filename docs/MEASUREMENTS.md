@@ -5709,3 +5709,66 @@ The suite reported two existing NumPy empty-slice warnings in the sampled-scenar
 fixture, with no failures. The exact/legacy collection-coordinate compatibility change
 was additionally checked with all five zone-routing tests and Ruff. Safety, determinism,
 Tier-3-off execution, contract and ground-truth-boundary checks remain green.
+
+## M-90 — 20% faster demo travel; 180 s rescue target (2026-09-19)
+
+Owner request: slightly faster units, with most rescues completed by t=180 s.
+`demo.yaml` now sets `robot_speed_multiplier: 1.20`. The scenario applies that factor
+to every robot's translation limit after loading either the evolved or fallback roster.
+Candidate morphology overrides in MAP-Elites respect the same scenario factor. No
+training was run. Scenarios without the setting retain 1.0, including `test.yaml`.
+The setting must be finite and positive.
+
+Terrain drag, loaded-carrier penalties and airborne speed still multiply the resulting
+limit. Turning limits, the 20 Hz simulation clock, casualty count, extraction points,
+hazard schedule and mission duration do not change. At a fixed heading on identical
+terrain, 20% greater speed cuts travel time by 16.7%; it does not compress the entire
+rescue sequence by that amount.
+
+### Demo construction only — seed 42, zero ticks
+
+| Lane | Previous median rated speed (m/s) | New median rated speed (m/s) |
+|---|---:|---:|
+| scout | 1.876 | 2.251 |
+| digger | 0.643 | 0.772 |
+| carrier, unloaded | 1.831 | 2.197 |
+| carrier, loaded on clear ground | 1.281 | 1.538 |
+| relay | 1.478 | 1.774 |
+
+These are speed limits, not measured mission-average velocities. All 512 robots receive
+the factor. Raw values: [`construction.json`](../runs/speed_audit/construction.json).
+
+### Same-machine timing comparison — test.yaml, seed 42, scripted Tier 3
+
+Only the scenario speed multiplier changes between arms. The sampler reads world
+counters after ordinary mission ticks; it never refreshes goals or changes control state.
+
+| Multiplier | Rescued at 60 s | at 120 s | at 180 s | at 420 s | Found at 420 s | Robots lost |
+|---|---:|---:|---:|---:|---:|---:|
+| 1.00 | 0 | 2 | 2 | 4 | 4 | 3 |
+| 1.20 | 1 | 2 | 3 | 3 | 3 | 2 |
+
+There are **8 total casualties** in this fixture. Early rescues improve **2 → 3**,
+but final discovery and rescues both fall **4 → 3**. Speed changes search trajectories;
+this is an early-completion tradeoff, not a demonstrated improvement in total rescues.
+The faster arm delivers at 55.95, 93.55 and 145.50 s; the baseline at 67.35, 114.10,
+355.75 and 408.65 s. Rescuing all three discovered casualties by 180 s does **not** mean
+most of the eight casualties have been rescued.
+
+Hashes: 1.00 `a7cb3f81ea18f690` (unchanged fixture baseline), 1.20
+`dc1f479ddac07bdc`. Reproduction:
+[`measure.py`](../runs/speed_audit/measure.py),
+[`timing.json`](../runs/speed_audit/timing.json).
+The full Nepal demo with hosted leadership has not been rerun; **most of its 110
+casualties rescued by 180 s remains an unverified target**. The 20% adjustment implements
+the requested modest speed increase, not a claim that this deadline is met.
+
+Physical-motion checks cover both evolved and fallback bodies, loaded ground travel,
+airborne travel, terrain drag and unchanged simulation time. The existing 60 s wall
+collision check also runs at 1.20×. All five targeted cases pass. Full-suite output is
+kept in [`check.log`](../runs/speed_audit/check.log).
+
+Final `make check`: Ruff clean, **656 tests passed** (two existing NumPy empty-slice
+warnings), followed by a successful headless seed-42 fixture: **4/8 rescued, 4/8 found**,
+hash `a7cb3f81ea18f690`. The default fixture remains byte-identical; only the demo
+configuration opts into faster travel.
