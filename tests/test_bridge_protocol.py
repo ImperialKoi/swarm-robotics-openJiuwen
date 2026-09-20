@@ -858,3 +858,111 @@ def test_the_drive_badge_and_its_modes_agree():
     used = set(re.findall(r"ManualDrive\.Mode\.(\w+)", HUD.read_text(encoding="utf-8")))
     assert used and used <= declared, f"hud.gd uses modes {sorted(used - declared)} that do not exist"
     assert "drive.on_state(" in GD.read_text(encoding="utf-8")
+
+
+def test_the_dashboard_can_name_every_voice_phase():
+    """A phase the HUD cannot label is a caption card with a blank badge.
+
+    Same cross-check as ACTIVITY and EVENT_COLOURS, for the same reason: `VoicePhase`
+    and `PHASE_LABEL` are written in different languages and drift silently.
+    """
+    import typing
+
+    from swarmmind.contracts.schemas import VoicePhase
+
+    phases = set(typing.get_args(VoicePhase))
+    body = re.search(r"const PHASE_LABEL := \{(.*?)\n\}", HUD.read_text(encoding="utf-8"), re.S)
+    assert body, "PHASE_LABEL not found in hud.gd"
+    labelled = set(re.findall(r'"(\w+)":', body.group(1)))
+    assert labelled == phases, (
+        "hud.gd's PHASE_LABEL has drifted from contracts/schemas.py VoicePhase\n"
+        f"  gd:     {sorted(labelled)}\n"
+        f"  python: {sorted(phases)}"
+    )
+
+    colours = re.search(r"const PHASE_COLOUR := \{(.*?)\n\}", HUD.read_text(encoding="utf-8"), re.S)
+    assert colours, "PHASE_COLOUR not found in hud.gd"
+    assert set(re.findall(r'"(\w+)":', colours.group(1))) == phases
+
+
+def test_the_dashboard_reads_every_field_the_voice_bridge_sends():
+    """`_on_voice` is the only producer; `ui.on_voice` the only consumer."""
+    import inspect
+
+    from swarmmind.nodes.bridge import BridgeNode as Bridge
+
+    sent = set(re.findall(r'"(\w+)":', inspect.getsource(Bridge._on_voice)))
+    sent.discard("t")
+    read = set(re.findall(r'msg\.get\("(\w+)"', re.search(
+        r"func on_voice\(msg: Dictionary\) -> void:(.*?)\nfunc ",
+        HUD.read_text(encoding="utf-8"), re.S).group(1)))
+    missing = read - sent
+    assert not missing, f"hud.gd reads voice fields the bridge never sends: {sorted(missing)}"
+    assert "voice" in GD.read_text(encoding="utf-8"), "main.gd does not dispatch t:voice"
+
+
+def test_the_push_to_talk_key_reaches_the_console():
+    """U is pressed in Godot; the bridge is the only way it can arrive."""
+    from swarmmind.bus.ws_server import WebSocketServer as Srv
+    from swarmmind.nodes.bridge import BridgeNode as Bridge
+
+    m = Mission(Scenario.load("test"), 42)
+    bridge = Bridge(m.world, Srv(port=8798), m.bus)
+    seen = []
+    bridge.on_mic = seen.append
+
+    assert bridge._mic_key({"t": "mic", "on": True}) is True
+    assert bridge._mic_key({"t": "mic", "on": False}) is True
+    assert seen == [True, False]
+    assert bridge.mic_held is False
+
+    # Anything else must fall through to the drive override untouched.
+    assert bridge._mic_key({"t": "drive", "robot": "r00", "v": 1.0, "w": 0.0}) is False
+    assert bridge._mic_key("not a dict") is False
+    m.close()
+
+
+def test_a_mic_key_with_no_console_is_harmless():
+    """The dashboard always sends U; a run without --voice must not care."""
+    from swarmmind.bus.ws_server import WebSocketServer as Srv
+    from swarmmind.nodes.bridge import BridgeNode as Bridge
+
+    m = Mission(Scenario.load("test"), 42)
+    bridge = Bridge(m.world, Srv(port=8797), m.bus)
+    assert bridge.on_mic is None
+    assert bridge._mic_key({"t": "mic", "on": True}) is True    # swallowed, not stored
+    assert bridge.mic_held is True
+    assert bridge.commands == [], "the key leaked into the unhandled command list"
+    m.close()
+
+
+def test_the_dashboard_sends_the_key_the_bridge_listens_for():
+    """`voice_key.gd` and `bridge._mic_key` must agree on the message and the key."""
+    import inspect
+
+    from swarmmind.nodes.bridge import BridgeNode as Bridge
+    from swarmmind.voice.mic import KEY_TTL_S
+
+    gd = (ROOT / "godot" / "scripts" / "voice_key.gd").read_text(encoding="utf-8")
+    assert 'host.send({"t": "mic", "on": on})' in gd, "voice_key.gd stopped sending t:mic"
+    assert "const KEY_TALK := KEY_U" in gd, "push-to-talk is no longer bound to U"
+    assert '"mic"' in inspect.getsource(Bridge._mic_key)
+
+    # The keep-alive must be comfortably inside the simulator's deadman, or a held key
+    # lapses mid-sentence on a single dropped frame.
+    send_every = float(re.search(r"const SEND_EVERY := ([\d.]+)", gd).group(1))
+    assert send_every * 3 <= KEY_TTL_S, (
+        f"voice_key.gd renews every {send_every}s but the mic lapses at {KEY_TTL_S}s")
+
+    assert "voice_key.setup(self)" in GD.read_text(encoding="utf-8"), (
+        "main.gd never instantiates VoiceKey, so U does nothing")
+
+
+def test_u_is_not_also_a_drive_or_camera_key():
+    """A key with two jobs is a key that does the wrong one."""
+    drive_gd = DRIVE.read_text(encoding="utf-8")
+    main_gd = GD.read_text(encoding="utf-8")
+    for name, text in (("manual_drive.gd", drive_gd), ("main.gd", main_gd)):
+        # `\b` matters: KEY_UP is the arrow and is bound in both, legitimately.
+        assert not re.search(r"\bKEY_U\b", text), (
+            f"{name} also binds U; push-to-talk would fight it")

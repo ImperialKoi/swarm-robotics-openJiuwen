@@ -33,3 +33,18 @@ Both paths default to `openai/gpt-5.6-terra` via OpenRouter, chosen by measureme
 models (M-88); see the setup guide for the team's isolated runtime. `OPENROUTER_MODEL`
 overrides the model for both paths.
 `.env` is gitignored; no API key is stored in tracked files.
+
+**Talk to the swarm.** `--voice` adds an operator voice channel: speak, and one model
+call hears the question, reads the operator's fog-limited map and answers out loud, with
+captions under the map and sector orders the swarm executes. The operator outranks Tier 3
+and the response team on the sectors they name. `--team-scout` adds a fourth team role
+that reads that map for the rescue lead.
+
+```bash
+uv sync --extra bridge --extra voice --extra dev --extra evo
+uv run --env-file .env python -m swarmmind.cli run --demo --voice
+uv run --env-file .env python -m swarmmind.cli run --demo --voice --response-team --team-scout
+```
+
+Both are optional and off by default, and neither claims a rescue-score improvement.
+Details, latency and cost in [docs/OMNI_VOICE.md](docs/OMNI_VOICE.md).

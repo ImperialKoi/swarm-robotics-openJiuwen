@@ -5,7 +5,12 @@
 <!-- current-selection -->
 ## Current defaults versus historical gate results
 
-Unflagged `Mission` defaults: `evolved=True`, `command=False`, `unit_policy=None`, `zone_routing=False`, `response_team=None`. The tables below record evaluation outcomes; they do not override later integration decisions. Zone routing remains off after M-76f; its Tier-3-off win did not establish a win for the live demo. The classical detector ships; M-74 records the later CNN evaluation. The response team is an opt-in application, without a rescue-uplift claim. See [current build and demo instructions](docs/MULTI_AGENT_DEMO.md).
+Unflagged `Mission` defaults: `evolved=True`, `command=False`, `unit_policy=None`, `zone_routing=False`, `response_team=None`. The tables below record evaluation outcomes; they do not override later integration decisions. Zone routing remains off after M-76f; its Tier-3-off win did not establish a win for the live demo. The classical detector ships; M-74 records the later CNN evaluation. The response team is an opt-in application, without a rescue-uplift claim. The operator
+voice channel (`--voice`) and the team's visual scout (`--team-scout`) are the same: both
+are opt-in applications, both default off, and **neither has been through this gate**.
+No rescue-score improvement is claimed or measured for either. They are interfaces and an
+extra observation, not performance changes; see
+[docs/OMNI_VOICE.md](docs/OMNI_VOICE.md) and M-92/M-93. See [current build and demo instructions](docs/MULTI_AGENT_DEMO.md).
 
 The [Nepal confluence crop](docs/NEPAL_TERRAIN.md) changes map geometry even for the same demo seeds. Gate results from the previous terrain do not establish performance on this crop; components remain tuned on the four demo maps used at the time of their training.
 <!-- /current-selection -->

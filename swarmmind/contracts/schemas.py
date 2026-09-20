@@ -33,6 +33,7 @@ EventKind = Literal[
     "robot_destroyed", "robot_out_of_comms", "robot_reconnected", "robot_recharged",
     "hazard_ignited", "sector_abandoned", "operator_action",
     "directive_issued", "directive_rejected", "hivemind_offline",
+    "operator_said", "operator_order", "operator_order_rejected",
     "mission_complete",
 ]
 
@@ -250,6 +251,31 @@ class Award(_Msg):
 class Heartbeat(_Msg):
     robot_id: str
     t: float
+
+
+# --- /operator/voice ---------------------------------------------------------------
+
+#: Where the exchange has got to, so the dashboard can show a live state rather than
+#: text that appears from nowhere 2 s after the operator stopped talking.
+VoicePhase = Literal["idle", "listening", "thinking", "speaking", "muted"]
+
+
+class VoiceCaption(_Msg):
+    """One frame of the operator's conversation, as the dashboard draws it.
+
+    `said` and `reply` persist between turns on purpose -- a caption that cleared the
+    moment playback ended would be gone before a judge standing behind the operator had
+    read it. `sectors` is what the order actually moved, for the caption's second line.
+    """
+
+    t: float
+    phase: VoicePhase
+    said: str = ""
+    reply: str = ""
+    sectors: list[str] = []
+    rejected: list[str] = []
+    #: Round-trip for the spoken turn, end of speech to reply in hand.
+    latency_ms: int = 0
 
 
 # --- /swarm/events -----------------------------------------------------------------

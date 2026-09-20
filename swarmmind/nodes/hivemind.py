@@ -51,6 +51,13 @@ class HivemindNode:
         self.applied: dict[str, Applied] = {}
         # Optional peer-reviewed orders own their sectors until their ordinary expiry.
         self.protected_sectors: frozenset[str] = frozenset()
+        #: Sectors the **operator** ordered, by the sim time of the order. A human at the
+        #: microphone outranks every model in the building: while one of these is live,
+        #: neither the Tier 3 cycle nor a reviewed team proposal may retask the sector.
+        #: Kept separate from `protected_sectors` because the response team *overwrites*
+        #: that set every step from its own leases (`team/controller.py`), and the two
+        #: must not be able to clear each other. They expire on the same 30 s clock.
+        self.operator_sectors: dict[str, float] = {}
         self.last_message: dict | None = None
         # `issued` counts directives that *changed* something. A model that re-sends an
         # identical directive every cycle is holding a position, not making 200 decisions,
@@ -161,7 +168,7 @@ class HivemindNode:
             return
 
         self._inflight = None
-        accepted = [d for d in accepted if d["sector"] not in self.protected_sectors]
+        accepted = [d for d in accepted if d["sector"] not in self.held_sectors]
         for r in rejected:
             self.stats["rejected"] += 1
             emit("directive_rejected", f"rejected {r.directive.get('sector', '?')}: {r.rule}",
@@ -181,8 +188,58 @@ class HivemindNode:
 
     # ------------------------------------------------------------------ effect
 
+    @property
+    def held_sectors(self) -> frozenset[str]:
+        """Sectors no fresh model directive may touch: team leases plus operator orders."""
+        return self.protected_sectors | frozenset(self.operator_sectors)
+
+    def apply_operator(self, world, msg, *, emit, bus):
+        """Apply the operator's spoken order. Outranks Tier 3 and the response team.
+
+        **Still filtered.** `hivemind/filter.py` runs on a human's words exactly as it
+        runs on a model's, and that is deliberate on two counts: the feasibility rules it
+        enforces are physical (a real sector id, never abandoning the last open sector),
+        and a rejection spoken back to the operator is the system explaining itself out
+        loud. Precedence is about outranking *other models*, not about outranking the
+        safety floor -- CLAUDE.md invariant #2 is not negotiable from a microphone either.
+        """
+        accepted, rejected, reasoning = self.filter.validate(msg, frozenset(self.applied))
+        for r in rejected:
+            self.stats["rejected"] += 1
+            emit("operator_order_rejected",
+                 f"operator order refused for {r.directive.get('sector', '?')}: {r.rule}",
+                 sector=r.directive.get("sector"))
+        for d in accepted:
+            self.stats["issued" if self._apply(world, d, emit) else "renewed"] += 1
+            # Claim the sector *after* the filter passed it, so a refused order holds
+            # nothing and the team stays free to work there.
+            self.operator_sectors[d["sector"]] = world.t
+        if accepted:
+            self.last_message = {
+                "schema": SCHEMA_VERSION, "issued_at": round(world.t, 2),
+                "source": "operator", "latency_ms": 0, "reasoning": reasoning,
+                "directives": accepted, "rejected": [],
+            }
+            emit("operator_order", reasoning or "operator order")
+            if bus is not None:
+                bus.publish(topics.HIVEMIND_DIRECTIVES, self.last_message)
+        return accepted, [r.directive.get("sector", "?") for r in rejected]
+
     def apply_reviewed(self, world, msg, source, *, emit, bus):
         """Apply a complete team proposal on the simulation thread through the same filter."""
+        # The operator outranks the team. Their sectors are dropped before validation
+        # rather than failing the whole proposal: the team is meant to keep working the
+        # rest of the map under the operator's goal, not to stall because one sector of
+        # its plan was spoken for.
+        held = frozenset(self.operator_sectors)
+        if held:
+            keep = [d for d in msg.get("directives", [])
+                    if isinstance(d, dict) and d.get("sector") not in held]
+            if len(keep) != len(msg.get("directives", [])):
+                emit("directive_rejected", "team deferred to a live operator order")
+                if not keep:
+                    return []
+                msg = {**msg, "directives": keep}
         accepted, rejected, reasoning = self.filter.validate(msg, frozenset(self.applied))
         for r in rejected:
             self.stats["rejected"] += 1
@@ -217,6 +274,13 @@ class HivemindNode:
 
     def _expire(self, world, emit=None) -> None:
         emit = emit or (lambda *a, **k: None)
+        # An operator's claim expires on the same clock as everything else. A human who
+        # abandons a sector and then walks away from the microphone must not leave a
+        # third of the map locked for the rest of the mission -- that is the quiet
+        # failure mode the 30 s expiry exists to prevent, and a person can cause it too.
+        for sector, at in list(self.operator_sectors.items()):
+            if world.t - at >= self.expiry:
+                del self.operator_sectors[sector]
         for sector, a in list(self.applied.items()):
             if world.t - a.at < self.expiry:
                 continue

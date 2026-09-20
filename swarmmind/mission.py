@@ -44,9 +44,11 @@ class Mission:
                  allow_api: bool = False, scripted_hivemind: bool = False,
                  genes=None, command: bool = False, evolved: bool = True,
                  unit_policy=None, zone_routing: bool = False, response_team=None,
-                 edge_steering: bool = False) -> None:
+                 edge_steering: bool = False, voice=None) -> None:
         if response_team is not None and not hivemind:
             raise ValueError("response_team requires the directive filter; remove --no-hivemind")
+        if voice is not None and not hivemind:
+            raise ValueError("voice requires the directive filter; remove --no-hivemind")
         self.sim = (DemoSim if realtime else FastSim)(scenario, seed, evolved=evolved)
         #: Optional per-robot decision layer inside Tier 2 (`control/unit_policy.py`).
         #: Consulted once per auction cycle, after the auction has allocated, for
@@ -139,6 +141,16 @@ class Mission:
 
             self.response_team = ResponseTeam(w, self.bus, **response_team)
 
+        #: The operator's voice channel (`voice/console.py`). Demo only, and additive:
+        #: `None` is every headless run, every training rollout and the gate, so nothing
+        #: here can move the seed-42 hash.
+        self.voice = None
+        if voice is not None:
+            from .voice.console import OperatorConsole
+
+            self.voice = OperatorConsole(w, voice)
+            self.voice.start()
+
     @property
     def world(self):
         return self.sim.world
@@ -211,6 +223,14 @@ class Mission:
             self.allocator.step(w, self.executor, self.tracker, emit=self._emit, bus=self.bus)
             if self.unit_policy is not None:
                 self.unit_policy.step(self)
+        # **Before the team, on purpose.** A spoken order is applied and its sectors
+        # claimed in the same tick it lands, so when the team next plans it already sees
+        # the operator's intent as a standing goal and their sectors as spoken for.
+        if self.voice is not None:
+            self.voice.step(w, self.executor, self.tracker, self.events,
+                            self.hivemind, emit=self._emit, bus=self.bus)
+            if self.response_team is not None and self.voice.goal:
+                self.response_team.set_goal(self.voice.goal, self.voice.goal_seq)
         if self.response_team is not None:
             self.response_team.step(w, self.executor, self.tracker, self.bus,
                                     self.hivemind, self._emit)
@@ -317,6 +337,8 @@ class Mission:
     def close(self):
         if self.response_team is not None:
             self.response_team.close()
+        if self.voice is not None:
+            self.voice.close()
 
 
 def run_mission(scenario: Scenario, seed: int, *, max_time: float | None = None,

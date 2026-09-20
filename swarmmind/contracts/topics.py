@@ -23,6 +23,12 @@ def assigned_task(robot_id: str) -> str:
 # --- hivemind ---------------------------------------------------------------------
 HIVEMIND_DIRECTIVES = "/hivemind/directives"
 
+# --- operator voice channel -------------------------------------------------------
+#: Captions and phase for the operator's spoken exchange with the swarm. Dashboard-facing
+#: like the event feed: it carries what was *said*, never anything the swarm could not
+#: already see. Published by `voice/console.py`, drawn under the map by main.gd.
+OPERATOR_VOICE = "/operator/voice"
+
 # --- world ------------------------------------------------------------------------
 WORLD_HAZARD_ZONE = "/world/hazard_zone"
 
