@@ -17,6 +17,7 @@ component status and measured limitations. Run it with `--demo --response-team` 
 - [CLAUDE.md](CLAUDE.md) — working rules and invariants
 - [docs/PLAN.md](docs/PLAN.md) — scope, priorities, risk
 - [docs/TECHNICAL.md](docs/TECHNICAL.md) — design of record
+- [docs/SETUP.md](docs/SETUP.md) — **clone to demo, every step**
 - [docs/DASHBOARD.md](docs/DASHBOARD.md) — **how to run the dashboard and read a run**
 - [Animated rescue fleet](docs/units/index.html) — 15 original unit models and their animations; [design notes](docs/UNIT_MODELS.md)
 
