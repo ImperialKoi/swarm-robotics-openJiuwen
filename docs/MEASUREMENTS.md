@@ -5772,3 +5772,78 @@ Final `make check`: Ruff clean, **656 tests passed** (two existing NumPy empty-s
 warnings), followed by a successful headless seed-42 fixture: **4/8 rescued, 4/8 found**,
 hash `a7cb3f81ea18f690`. The default fixture remains byte-identical; only the demo
 configuration opts into faster travel.
+
+---
+
+## M-91 — operator controls: 2x driven speed, an action key, drone camera keys (2026-09-19)
+
+Owner request: a faster unit under the keys, a space-bar action, and the arrow keys on
+the camera for drones only. All three are dashboard-path only — `--headless`, the gate
+and every rollout have no bridge, so none of this is reachable from a measurement.
+
+### The speed ceiling is per-robot now, and that had to be proved hash-neutral
+
+`OPERATOR_SPEED = 2.0` (`sim/robot.py`) applies in two places that must agree:
+`ManualOverride.command` raises what Tier 1 is handed, and `World.step`'s clip had to
+stop capping it. That second one is a change to a line on the 20 Hz path every
+evaluation and the seed-42 hash run through, so it was measured rather than argued:
+`np.clip(v_cmd, -REVERSE_SPEED * v_max, v_max)` became
+`cap = v_max * speed_boost` with `speed_boost` all ones for the swarm.
+
+Same machine, same seeds, the only difference being that line, taken in a `git worktree`
+of the same commit:
+
+| Scenario | Baseline clip | Per-robot ceiling |
+|---|---|---|
+| `test.yaml`, seed 42, 420 s | `a7cb3f81ea18f690` | `a7cb3f81ea18f690` |
+| `demo.yaml`, seed 42, 420 s | `e0f97e63c70b291c` | `e0f97e63c70b291c` |
+
+Byte-identical on both. `x * 1.0 == x` exactly, so the arithmetic is unchanged for every
+robot the operator is not holding, and `test_headless_never_sees_the_boost` asserts the
+array stays all ones through a mission. The demo arm is the 512-robot map at 1.20x
+(M-90), so the boost lands at 2.4x the original archetype rating: 2.2-4.8 m/s.
+
+**The safety floor is unaffected**, which is the part worth checking rather than
+assuming: `_wall_override` sweeps the *commanded* distance, so a faster robot sweeps
+further. At 20 Hz the fastest boosted ground unit steps 0.20 m against a 0.5 m cell, and
+the sweep samples at 0.5 and 1.0 of that plus the body radius — still two samples inside
+every cell it enters. `test_the_safety_floor_holds_when_the_operator_reverses_into_a_wall`
+is unchanged and still passes.
+
+### The action key reads ground truth, so it lives in the simulator
+
+Space sends `{"t": "act", "robot": ...}` and nothing else. Whether a casualty is within
+`REACH_GRAB` is a question only the world can answer, so `World.operator_act` decides
+between PICK UP, SET DOWN, TAKE OFF and LAND, and the same call — as `operator_offer` —
+fills `manual[2]` of every state frame for the badge. One code path, so the label and
+the key cannot disagree. New event kind `operator_action`; new wire table
+`OPERATOR_ACTION` in the frozen contract, mirrored by `ACTION_LABELS` in hud.gd and
+cross-checked by `test_bridge_protocol.py` the way `ACTIVITY` is.
+
+Two behaviour changes fall out of it, both deliberate:
+
+- **Automatic pickup is suspended for the leased robot.** Without it `_update_victims`
+  hands a casualty straight back on the tick after the operator sets it down, and the key
+  looks broken. Digging has no such conflict and stays automatic. Autonomy resumes the
+  moment the lease lapses — asserted both ways in `test_manual_override.py`.
+- **A driven rotor's height is the latch, not the throttle.** `W` used to take one off
+  implicitly; it now does nothing until the operator presses space, because a landed
+  rotor does not taxi (`v = where(rotor & ~air, 0, v)` was already true). Defensible only
+  because the badge offers TAKE OFF the moment the keys touch it, which is asserted next
+  to the stillness in `test_a_landed_drone_does_not_taxi_and_says_so`.
+
+### Arrow keys, drones only
+
+A rotor is the one chassis whose heading and whose best view point in different
+directions — it crosses ground at 2x and sees nothing until it lands. On one, the arrows
+move `pov_look` (POV, clamped to +/-2.2 rad yaw) or the existing chase rig; on every other
+chassis they stay what they were, the drive keys' second home. At `pov_look == ZERO` the
+POV eye vector is the original one unchanged, so the framing render3d.py signed off on is
+untouched for every unit but a drone under the keys.
+
+### Checks
+
+Ruff clean. Full suite **668 passed** (the same two pre-existing NumPy empty-slice
+warnings as M-90), including the native headless-Godot check
+`godot/tests/manual_drive_check.gd`, extended to cover the action key's one-press-one-action
+edge, the three-field echo, and the arrow-key handover on a rotor.

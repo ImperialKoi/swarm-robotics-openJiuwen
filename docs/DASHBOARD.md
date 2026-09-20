@@ -271,10 +271,12 @@ speed), and `A`/`D` or `←`/`→` turn it. This is layered on the autonomy, not
 
 - **Holding a key takes the unit.** The simulator puts the operator's command in place of
   that one robot's goal-seeking. It keeps its task, and the rest of the swarm is untouched.
-- **The driven unit runs at twice its rating.** These are 0.9–2.0 m/s machines on a
-  480 × 320 m map, and at the rated speed a judge who takes the keys to a digger watches it
-  cross one sector. The boost is the operator's, not the body's: exactly one robot has it,
-  for exactly as long as the lease is held (`OPERATOR_SPEED` in `sim/robot.py`).
+- **The driven unit runs at twice its rating.** On the demo map that is 2.2–4.8 m/s
+  (the archetypes are 0.9–2.0 m/s, already scaled by `demo.yaml`'s 1.20× —
+  [M-90](MEASUREMENTS.md)), on 480 × 320 m. At the rated speed a judge who takes the keys
+  to a digger watches it cross one sector. The boost is the operator's, not the body's:
+  exactly one robot has it, for exactly as long as the lease is held, and no evaluation,
+  gate or hash can see it (`OPERATOR_SPEED` in `sim/robot.py`).
 - **Letting go hands it back.** The unit stops and holds for 1.5 s, so taps are not fought
   between, then resumes its task from where it was left. There is no release key.
 - **Switching units hands the old one back at once.** Click another robot, press `F` to the

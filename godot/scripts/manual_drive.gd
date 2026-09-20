@@ -38,9 +38,9 @@ const KEYS_RIGHT := [KEY_D, KEY_RIGHT]
 const KEY_ACT := KEY_SPACE
 #: The arrow keys among the four above. **On a drone they belong to the camera instead**
 #: (main.gd `_camera_keys`) and this script must not read them: a drone is the one unit
-#: where it is pointed and where it is worth looking are different questions, and
-#: swinging the camera round a hovering rotor must not also yaw the rotor out from under
-#: it. On every other chassis they stay what they have always been -- WASD's other home.
+#: whose heading and whose best view point in different directions, and swinging the
+#: camera round a hovering rotor must not also yaw the rotor out from under it. On every
+#: other chassis they stay what they have always been -- WASD's other home.
 const ARROW_KEYS := [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]
 
 #: Fraction of the unit's own turn rate that A/D ask for. Full rate is 2.0-3.5 rad/s: a

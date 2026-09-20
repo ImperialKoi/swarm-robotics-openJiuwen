@@ -342,6 +342,27 @@ def test_the_action_key_flies_a_drone_and_sets_it_down():
     assert not w.airborne[i], "the key did not set the drone down"
 
 
+def test_a_landed_drone_does_not_taxi_and_says_so():
+    """The behaviour change the latch buys, and the one the badge has to cover.
+
+    `W` used to take a rotor off implicitly. Now it does nothing until the operator says
+    so, which is only defensible because the unit offers TAKE OFF the moment the keys
+    touch it -- so the offer is asserted here next to the stillness that makes it needed.
+    """
+    m = _demo()
+    w = m.world
+    i = _rotor(m)
+    _held(m, i)
+    at = w.pos[i].copy()
+    _say(m, t="drive", robot=w.robot_ids[i], v=1.0, w=0.0)
+    for _ in range(20):
+        m.tick()
+    assert not w.airborne[i]
+    assert np.allclose(w.pos[i], at), "a landed rotor taxied across the ground"
+    assert m.bridge.manual.wire(w)[2] == OPERATOR_ACTION["take_off"], (
+        "the keys took the unit but the badge never offered the key that moves it")
+
+
 def test_a_drone_let_go_of_mid_flight_goes_back_to_its_autonomys_height():
     """The latch is the lease's, not the robot's: a rotor left hovering forever because
     an operator wandered off is a unit quietly removed from the swarm."""
