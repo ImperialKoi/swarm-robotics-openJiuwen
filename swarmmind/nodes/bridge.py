@@ -87,9 +87,16 @@ class BridgeNode:
         #: bridge is the only way a command can arrive: `--headless` has no bridge, so
         #: no evaluation or hash can see this.
         self.manual = ManualOverride(world)
+        #: Push-to-talk. Set by `Mission` to the voice console's handler when `--voice`
+        #: is on, and left None otherwise -- the bridge must not import `voice`, which is
+        #: an optional extra and absent from every headless build.
+        self.on_mic = None
+        #: What the dashboard's badge reads: True while the simulator believes U is down.
+        self.mic_held = False
         server.on_connect = self._greet
         if bus is not None:
             bus.subscribe(topics.SWARM_EVENTS, self._on_event)
+            bus.subscribe(topics.OPERATOR_VOICE, self._on_voice)
 
     # ------------------------------------------------------------------ hello
 
@@ -194,8 +201,24 @@ class BridgeNode:
         # In arrival order, so a `release` of the old unit and the first `drive` of the
         # new one, sent in the same dashboard frame, land on the same tick.
         for c in self.server.poll_commands():
+            if self._mic_key(c):
+                continue
             if not self.manual.receive(world, c):
                 self.commands.append(c)
+
+    def _mic_key(self, c) -> bool:
+        """`{"t": "mic", "on": bool}` from the dashboard. True if this was one.
+
+        Handled here rather than in `ManualOverride` because it is not about a robot:
+        the operator is talking to the whole swarm, so it needs no unit and works in
+        every view, orbit included.
+        """
+        if not isinstance(c, dict) or c.get("t") != "mic":
+            return False
+        self.mic_held = bool(c.get("on"))
+        if self.on_mic is not None:
+            self.on_mic(self.mic_held)
+        return True
 
     def _state(self, world, executor, tracker) -> dict:
         # 8 columns. chassis is on the wire because locomotion is half of what makes a
@@ -338,6 +361,23 @@ class BridgeNode:
             "hz": [round(float(h.centre[0]), 1), round(float(h.centre[1]), 1),
                    round(float(h.radius), 1)] if h.active else None,
         }
+
+    def _on_voice(self, msg: dict) -> None:
+        """Operator captions, straight through. Published on change, not at 10 Hz.
+
+        Carries text and sector ids only -- the two lines the dashboard draws under the
+        map and the badge beside them. No audio crosses this socket: the reply is played
+        by the process that generated it, so a 24 kHz stream never competes with the
+        state frames for Godot's 64 KB inbound buffer.
+        """
+        if self.server.client_count == 0:
+            return
+        self.server.broadcast({
+            "t": "voice", "phase": msg.get("phase", "idle"),
+            "said": msg.get("said", ""), "reply": msg.get("reply", ""),
+            "sectors": msg.get("sectors", []), "rejected": msg.get("rejected", []),
+            "latency_ms": int(msg.get("latency_ms", 0)), "time": msg.get("t", 0.0),
+        })
 
     def _on_event(self, ev: dict) -> None:
         if self.server.client_count == 0:

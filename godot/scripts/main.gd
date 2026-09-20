@@ -350,6 +350,9 @@ var thermal_on := false
 var thermal: ThermalVision
 #: WASD / arrow-key override of the followed unit -- scripts/manual_drive.gd.
 var drive: ManualDrive
+#: Push to talk on U -- scripts/voice_key.gd. Present whether or not the simulator was
+#: started with --voice; with the channel off the key sends a message nothing acts on.
+var voice_key: VoiceKey
 var audio: SwarmAudio
 var colour_by_chassis := false
 var _drag := false
@@ -444,6 +447,9 @@ func _ready() -> void:
 	drive = ManualDrive.new()
 	add_child(drive)
 	drive.setup(self)
+	voice_key = VoiceKey.new()
+	add_child(voice_key)
+	voice_key.setup(self)
 	audio = SwarmAudio.new()
 	add_child(audio)
 	audio.setup(self)
@@ -578,6 +584,10 @@ func _handle(msg: Dictionary) -> void:
 			_update_markers()
 		"event":
 			_on_event(msg)
+		"voice":
+			# Operator captions. No audio on this socket: the reply is played by the
+			# process that generated it, so nothing competes with the state frames.
+			ui.on_voice(msg)
 
 
 func link_up() -> bool:
@@ -1433,6 +1443,13 @@ const EVENT_COLOURS := {
 	# The operator's own hands on one unit. The same amber the drive badge and the
 	# "operator driving" log line use, so everything they do reads as one voice.
 	"operator_action": "#ffbf3d",
+	# The operator's voice. Their transcript shares the amber of `operator_action`,
+	# because both are the same human acting; an order they gave is the brightest thing
+	# on the feed, and the filter refusing one is coloured to be noticed rather than
+	# hidden -- the same reasoning as directive_rejected above.
+	"operator_said": "#ffbf3d",
+	"operator_order": "#ffe08a",
+	"operator_order_rejected": "#ff78d2",
 }
 
 

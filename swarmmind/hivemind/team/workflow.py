@@ -6,6 +6,9 @@ plan; the lead must respond; safety has the final veto. No role can actuate a ro
 
 from .tools import MissionTools
 
+#: The scout (`scout.py`) is the fourth role and does not appear here: it does not vote
+#: on a candidate, it contributes an observation. Its finding reaches the lead through
+#: the snapshot, which is why it needs no turn in the loop below.
 ROLES = {
     "lead": "Rescue lead: select a candidate by its numeric index to meet the goal. These are proposed NEW priorities, so the sector need not already be high priority. Prefer rescue work, otherwise explore with connected units. Use -1 only if no useful choice exists. Use peer feedback when revising.",
     "logistics": "Logistics specialist: challenge unsupported capacity/coverage. Choose only an index in feasible_choices, or -1 to reject. If the lead's choice is infeasible, choose a feasible alternative. Your note must describe the capacity or coverage finding, not repeat the lead's note.",
@@ -21,12 +24,26 @@ async def collaborate(snapshot, config, decide, record):
     for i, candidate in enumerate(candidates):
         candidate["index"] = i
     record("decomposed", role="lead", goal=config.goal,
-           tasks=["prioritize rescue/search", "check logistics", "review safety", "verify outcome"])
+           tasks=(["read the map"] if snapshot.get("scout") else [])
+           + ["prioritize rescue/search", "check logistics", "review safety", "verify outcome"])
     if not candidates:
         return {"directive": None, "reason": "No observed work needs a new priority."}
     context = {"goal": config.goal, "snapshot": snapshot["id"],
                "instruction": "Select one candidate index for a new order, or -1 to withhold.",
                "choices": candidates, "previous_outcome": outcome}
+    # What the scout saw, when it has looked. It is advice from a teammate with a
+    # different sense, not an instruction: the lead still chooses, logistics can still
+    # overrule the choice on capacity, and safety can still veto the result.
+    scout = snapshot.get("scout")
+    if scout:
+        context["scout"] = {
+            "note": scout.get("note", ""), "suggests": scout.get("sector", ""),
+            "weight": "A teammate's visual reading of the operator's map. It sees "
+                      "coverage the numbers do not show, but it cannot check capacity "
+                      "or safety. Treat it as evidence, not as a decision.",
+        }
+        record("observed", role="scout", note=scout.get("note", ""),
+               sector=scout.get("sector", ""))
 
     async def turn(role, message):
         result = await decide(role, message, len(candidates))

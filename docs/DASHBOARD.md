@@ -246,6 +246,7 @@ topic; the implemented hazard feed is `truth.hz`. No additional listener is need
 | `W` `A` `S` `D` | in POV or chase, **drive the followed unit** — see below |
 | `Space` | the followed unit's **action**: pick a casualty up, set it down, take a drone off or land it. The badge says which |
 | arrows | the same four drive keys — **except on a drone**, where they aim its camera instead |
+| `U` | **hold to talk to the swarm**, release to send. Needs the simulator started with `--voice`; the key is harmless without it. Works in every view, including the orbit — you are addressing the whole swarm, not a unit. See [OMNI_VOICE.md](OMNI_VOICE.md) |
 
 Every toggle is also a clickable row in the HUD's overlay bus. The top of the view names
 the view you are in — `ORBIT`, `POV` or `CHASE`.

@@ -5,6 +5,16 @@ lead proposes work, a logistics specialist challenges unsupported plans, and a s
 reviewer can veto dispatch. Their reviewed sector orders affect the existing auction;
 the auction and robot reflexes continue independently when the team is unavailable.
 
+Two optional additions, both off by default:
+
+- **`--team-scout`** adds a fourth role that reads the operator's map rather than the
+  snapshot table, and hands the lead an observation its peers cannot derive from numbers
+  (`team/scout.py`). It advises; the lead still chooses and safety still vetoes.
+- **`--voice`** lets a human incident commander speak to the swarm. Their spoken intent
+  becomes this team's `goal`, so the lead, logistics and safety roles re-plan under it
+  while still issuing their own orders. The operator outranks the team on the sectors
+  they named, and only those. See [OMNI_VOICE.md](OMNI_VOICE.md).
+
 This is a simulated coordination demonstration, not a deployed emergency-response
 system. It demonstrates collaboration and failure handling. No improvement in rescue
 score over a single agent or the scripted baseline has been established.

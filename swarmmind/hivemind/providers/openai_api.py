@@ -24,6 +24,11 @@ TUNING = {
     "openai/gpt-5.6-terra": {"reasoning": {"effort": "none"}, "temperature": False, "max_tokens": 400},
     "openai/gpt-5.6-luna":  {"reasoning": {"effort": "none"}, "temperature": False, "max_tokens": 400},
     "openai/gpt-4.1-mini":  {"reasoning": None, "temperature": True, "max_tokens": 200},
+    # M-92. Reasoning is *mandatory* on this endpoint -- `effort: "none"` is a hard 400 --
+    # and "minimal" measured both faster and cheaper than "low" (0 reasoning tokens
+    # against 261). It carries the operator's fused voice+vision turn in `omni.py`.
+    "google/gemini-3.5-flash": {"reasoning": {"effort": "minimal"}, "temperature": False,
+                                "max_tokens": 1500},
 }
 #: An unmeasured model gets the cautious shape: no temperature, no reasoning control,
 #: room to answer. That costs quality at worst, never a 404 or a truncated directive.

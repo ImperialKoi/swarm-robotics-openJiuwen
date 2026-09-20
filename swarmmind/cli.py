@@ -41,6 +41,14 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--team-trace", default="runs/team/trace.jsonl",
                      help="team evidence log; a Markdown report is written alongside it")
     run.add_argument("--team-goal", help="high-level response goal (up to 500 characters)")
+    run.add_argument("--team-scout", action="store_true",
+                     help="add the visual scout: a fourth role that reads the operator's "
+                          "map and hands the lead an observation the numbers cannot show "
+                          "(needs OPENROUTER_API_KEY and network)")
+    run.add_argument("--voice", action="store_true",
+                     help="operator voice channel: speak to the swarm and it answers out "
+                          "loud, with captions on the dashboard. Needs a microphone, "
+                          "OPENROUTER_API_KEY and network (uv sync --extra voice)")
     # Branch `rl/unit-policy`. Both default off, so an unflagged run is the shipped swarm.
     run.add_argument("--zone-routing", action="store_true",
                      help="exact fine-grid routing to collection points: +15 rescues with "
@@ -64,8 +72,13 @@ def main(argv: list[str] | None = None) -> int:
             ap.error("--response-team owns Tier 3; remove the conflicting hivemind flag")
         if args.response_team != "heuristic" and not args.demo:
             ap.error("a model response team requires --demo; use heuristic for headless checks")
-    elif args.team_python or args.team_goal:
-        ap.error("--team-python and --team-goal require --response-team")
+    elif args.team_python or args.team_goal or args.team_scout:
+        ap.error("--team-python, --team-goal and --team-scout require --response-team")
+    if args.voice:
+        if not args.demo:
+            ap.error("--voice is a demo control; it needs --demo")
+        if args.no_hivemind:
+            ap.error("--voice applies orders through the directive filter; drop --no-hivemind")
 
     scn = Scenario.load(args.scenario)
     opts = _extras(args)
@@ -92,10 +105,26 @@ def _extras(args) -> dict:
         out["response_team"] = {
             "mode": args.response_team, "python": args.team_python,
             "trace_path": args.team_trace, "goal": args.team_goal, "console": True,
+            "scout": args.team_scout,
         }
         print(f"  response team: {args.response_team}; trace: {args.team_trace}")
+        if args.team_scout:
+            from .hivemind.team.scout import DEFAULT_SCOUT_MODEL
+
+            print(f"  team scout ON: {DEFAULT_SCOUT_MODEL} reads the map for the lead")
         print(f"  disable team: touch {Path(args.team_trace).with_suffix('.stop')} "
               "(scripted fallback continues; accepted orders expire normally)")
+    if args.voice:
+        from .hivemind.providers.omni import OmniProvider
+
+        # Built here rather than inside Mission so a missing key fails before the world
+        # is built and the dashboard is waiting, with a message that says what to do.
+        try:
+            out["voice"] = OmniProvider()
+        except ValueError as exc:
+            raise SystemExit(f"  --voice: {exc}") from exc
+        print(f"  voice ON: {out['voice'].model} hears and sees, "
+              f"{out['voice'].voice_model} speaks; the operator outranks Tier 3")
     if args.zone_routing:
         print("  zone routing ON: exact routing to collection points (not the demo default)")
     if args.edge_steering:
@@ -145,6 +174,12 @@ def _demo(scn, args, opts: dict | None = None) -> int:
                 **_hivemind_opts(args), **(opts or {}))
     server = WebSocketServer(args.host, args.port)
     m.bridge = BridgeNode(m.world, server, m.bus)
+    # Push-to-talk. The key is pressed in Godot and the bridge is the only way it can
+    # arrive, so the wiring lives here rather than in `Mission`: a headless run has no
+    # bridge, and nothing there can open a microphone.
+    if m.voice is not None:
+        m.bridge.on_mic = m.voice.on_mic_key
+        print("  hold U on the dashboard to talk; release to send")
     try:
         server.start()
     except OSError as exc:

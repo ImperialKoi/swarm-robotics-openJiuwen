@@ -42,6 +42,10 @@ uv run python -m swarmmind.cli run --demo --no-hivemind   # must still work
 uv run python -m swarmmind.cli run --headless --zone-routing      # carrier-trap fix, not the demo default
 uv run python -m swarmmind.cli run --demo --unit-policy runs/rl/policy_best.npz  # kept, unused
 
+uv sync --extra bridge --extra voice --extra dev --extra evo   # the full env; `--extra voice` ALONE prunes websockets
+uv run --env-file .env python -m swarmmind.cli run --demo --voice                 # talk to the swarm (docs/OMNI_VOICE.md)
+uv run --env-file .env python -m swarmmind.cli run --demo --voice --response-team --team-scout
+
 uv run python scripts/kaggle_bundle.py         # zip for Kaggle -> runs/kaggle/swarmmind-rl-src.zip
 # then on Kaggle: unit_policy.ipynb, JOB="bound" (~45 min) or JOB="train" (11 h, resumable)
 
@@ -73,7 +77,7 @@ Breaking any of these is a regression regardless of how the demo looks.
 1. **Tier 2 never depends on Tier 3.** The auction must allocate, execute and self-heal with `/hivemind/directives` completely silent. `tests/test_mission.py` runs with the hivemind disabled and must pass. This is the project's central claim — do not make a directive load-bearing.
 2. **Tier 1 is the safety floor.** The swept-circle wall override in `control/tier1_reflex.py` is not bypassable by any higher tier, ever.
 3. **Perception is real, and no swarm-side code reads ground truth.** Robots see through a detector running on their own occluded camera frame (`perception/`). Nothing above `perception/` may read victim positions, the hazard disc, or the appearance raster from the simulator - only `Detection` objects. The simulation owns optics (crop, rotate, occlude); the robot owns the detector.
-4. **No swarm-side code reads `/world/ground_truth`.** It exists for the dashboard alone. `tests/test_no_ground_truth_leak.py` enforces this; if it fails, the fog-of-war claim is false and the demo is dishonest.
+4. **No swarm-side code reads `/world/ground_truth`.** It exists for the dashboard alone. `tests/test_no_ground_truth_leak.py` enforces this over `nodes`, `control`, `hivemind`, `training` and `voice`; if it fails, the fog-of-war claim is false and the demo is dishonest. The voice console renders `MissionRenderer.views()[0]` -- the swarm view -- and never `[1]`, the god view.
 5. **`swarmmind/contracts/` is FROZEN.** Schemas and topic names are defined there and nowhere else. A change to a schema is a change to `contracts/`, the Godot parser, and the tests, in one commit.
 6. **Determinism.** Seed 42 must produce a byte-identical scorecard hash. One seeded `Generator` per subsystem from `SeedSequence.spawn()`; never global `np.random` or bare `random`; **never iterate a `set` or unordered `dict` in the sim or auction loop** — sort by id. Rehearsed demo timings depend on this.
 
@@ -99,7 +103,8 @@ Godot 4 (native macOS) ──WebSocket 10Hz── bridge_node
 - ROS2 is a **transport adapter, not a dependency**. Nodes are transport-agnostic. Do not `import rclpy` outside `bus/ros2.py`.
 - Godot talks **WebSocket**, not `godot_ros`. Do not reintroduce the GDExtension.
 - **The dashboard is 3D; the simulation is 2.5D and stays that way.** `world.height` is render-only - navigation, bidding, collision and perception are all flat. 512 robots with 3D physics do not fit this machine. Keep saying *custom 2.5D kinematic simulator*.
-- **Godot cannot be run from the dev environment.** Anything visual gets verified first with `swarmmind/viz/render3d.py`, which renders the same scene to PNG offline. Write the maths, look at the frame, then port it to GDScript. `tests/test_bridge_protocol.py` parses `main.gd` and fails the build if the wire format and the dashboard disagree.
+- **Godot 4.7.2 IS on this machine**, at `/Applications/Godot.app/Contents/MacOS/Godot`, and `godot/tests/*_check.gd` run the real dashboard headlessly -- use them for anything visual. `swarmmind/viz/render3d.py` still renders the scene to PNG offline for checking maths, and is **4.4-5.6 s per frame** (M-93), so it is a verification tool and never a runtime path.
+- **A new `class_name` needs `Godot --headless --path godot --import`** before the native checks pass: the class cache is gitignored and generated, and one unresolved class fails *every* check with an error naming an innocent file (M-94). Write the maths, look at the frame, then port it to GDScript. `tests/test_bridge_protocol.py` parses `main.gd` and fails the build if the wire format and the dashboard disagree.
 - **Two palettes, on purpose.** `perception/raster.py` is what the detector sees - dark, low-contrast, warm rubble confusable with a casualty. `render3d.py` / `main.gd` use a separate display palette for human eyes. Do not unify them.
 - **Nav2 is out** of the primary path. Tier 1 is our own A* + vector-field controller.
 
@@ -169,6 +174,18 @@ Accuracy matters more than impressiveness here — a judge who catches an overst
 - **CV detector (D11):** small conv net over 48x48x3 egocentric frames, trained on Kaggle GPU against simulator labels. Must beat `perception/classical.py` at the gate or the classical detector ships. Perception is real either way.
 - **Hivemind (primary):** locally-served `Qwen2.5-1.5B-Instruct` GGUF via `llama-server` with JSON-schema-constrained decoding. Fine-tuned on this simulator.
 - **Hivemind (API rung):** Anthropic SDK, model `claude-opus-5`, `output_config={"effort":"low","format":{...}}` for structured output, `thinking={"type":"adaptive"}`. **Assistant prefill returns 400 on Opus 5** — use structured outputs to constrain the JSON, never prefill. ~$0.60 per 7-minute run. **There is no API key on this machine, so this rung has never run** — `build_ladder` drops it silently and the code is unverified against the live API. Do not describe it as working.
+- **Operator voice (`--voice`, demo only):** one `google/gemini-3.5-flash` call takes the
+  operator's speech, the fog-limited swarm view and the blackboard together and returns a
+  transcript, a spoken reply, a team goal and directives; `openai/gpt-audio-mini` streams
+  the speech back. Both on the same `OPENROUTER_API_KEY`. **OpenRouter serves no Qwen omni
+  model** -- every `qwen/*` there is text+image at most, and only the two `gpt-audio*`
+  models emit audio (M-92), which is why speech out is a second call. `reasoning.effort`
+  must be `"minimal"`: `"none"` is a hard 400 and `"low"` is slower *and* dearer. Audio
+  output is a 400 without `stream: true`.
+- **The operator outranks Tier 3 and the team, not the filter.** A spoken order claims its
+  sectors in `HivemindNode.operator_sectors` and expires on the same 30 s clock; the team
+  keeps working every sector the operator did not name. `hivemind/filter.py` still runs on
+  a human's words, and the refusal is spoken back.
 - **The schema is the latency budget.** Generation dominates the 6 s cycle. Unconstrained, the 1.5B model took 10.6 s per call and every cycle fell through to the scripted rung while appearing to work. `maxLength` in `DIRECTIVE_SCHEMA` compiles to a GBNF constraint; loosening it is a latency change first ([MEASUREMENTS.md M-27](docs/MEASUREMENTS.md)).
 - **`nodes/hivemind.py` must stay asynchronous.** One tick starts a request, a later tick collects it. Joining the worker thread — the obvious design, and one that passes every test that uses an instant provider — freezes `DemoSim` for seconds at a time, because it runs at wall-clock speed.
 - Every hivemind output passes `hivemind/filter.py` before it can affect anything. Rejections are published and logged on purpose — the filter catching a bad directive is a good demo moment.
@@ -192,6 +209,8 @@ Accuracy matters more than impressiveness here — a judge who catches an overst
 | **Every problem hit so far, and what fixed it** | [docs/FIXES.md](docs/FIXES.md) — grouped by subsystem; read before re-fixing something |
 | Why the rescue rate is ~11%, measured live | `uv run python scripts/diagnose.py` · [MEASUREMENTS.md M-34/35/36](docs/MEASUREMENTS.md) |
 | Demo running order | [docs/RUNBOOK.md](docs/RUNBOOK.md) (written D13) |
+| **Operator voice channel** (speech + vision + language, one call) | [swarmmind/voice/](swarmmind/voice/) · [swarmmind/hivemind/providers/omni.py](swarmmind/hivemind/providers/omni.py) · [docs/OMNI_VOICE.md](docs/OMNI_VOICE.md) · [MEASUREMENTS.md M-92](docs/MEASUREMENTS.md) |
+| Team's visual scout (the fourth role, reads pixels) | [swarmmind/hivemind/team/scout.py](swarmmind/hivemind/team/scout.py) |
 | Unit policy (per-robot staging inside Tier 2) | [swarmmind/control/unit_policy.py](swarmmind/control/unit_policy.py) · [TECHNICAL.md §7a](docs/TECHNICAL.md) · [training_notes/run4-unit-policy.md](training_notes/run4-unit-policy.md) |
 | Unit-policy training (BC -> PPO, numpy), bound, Kaggle notebook | [swarmmind/training/rl/](swarmmind/training/rl/) · [swarmmind/training/notebooks/unit_policy.ipynb](swarmmind/training/notebooks/unit_policy.ipynb) |
 | Routing to collection points (carrier trap fix; kept, **off by default**) | [swarmmind/control/zone_routing.py](swarmmind/control/zone_routing.py) · [MEASUREMENTS.md M-76, M-76e, M-76f](docs/MEASUREMENTS.md) |

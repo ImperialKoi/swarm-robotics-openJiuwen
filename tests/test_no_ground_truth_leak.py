@@ -12,7 +12,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1] / "swarmmind"
 
 #: Trees that must never see ground truth.
-GUARDED = ("nodes", "control", "hivemind", "training")
+#: `voice` is here because the operator console's answers become directives. It renders
+#: `MissionRenderer.views()[0]` -- the swarm view, the appearance raster masked by the
+#: fog -- and never `[1]`, which carries COLOR_VICTIM_TRUE dots read from world.victims.
+GUARDED = ("nodes", "control", "hivemind", "training", "voice")
 
 #: The only files permitted to reference it: the dashboard bridge, and the constant itself.
 ALLOWED = {"bridge.py", "topics.py"}

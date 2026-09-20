@@ -54,6 +54,23 @@ const C_FAINT := Color(0.310, 0.349, 0.345)
 #: the hazard, and neither of those is what a dropped socket means.
 const C_WARN := Color(1.0, 0.75, 0.24)
 
+# Operator voice phases. Mirrors contracts/schemas.py VoicePhase; test_bridge_protocol.py
+# compares the two so a new phase cannot reach the wire without a label here.
+const PHASE_LABEL := {
+	"listening": "\u25cf LISTENING",
+	"thinking": "\u25cf WORKING",
+	"speaking": "\u25cf SWARMMIND",
+	"idle": "\u25cb HOLD U TO TALK",
+	"muted": "\u25cb MIC OFF",
+}
+const PHASE_COLOUR := {
+	"listening": C_WARN,
+	"thinking": C_ACCENT,
+	"speaking": C_ACCENT,
+	"idle": C_DIM,
+	"muted": C_FAINT,
+}
+
 #: Panel refresh rate. State frames land at 10 Hz, so faster buys nothing but text
 #: reshaping; the viewport frame is still redrawn every frame because the camera moves.
 const REFRESH_HZ := 10.0
@@ -208,6 +225,15 @@ var _cov_rate: Label
 var _cov_seeded: Label
 var _ledger_val: Array[Label] = []
 var _t3_side: Label
+# Operator voice captions, drawn over the bottom of the map rather than in a rail: the
+# operator is watching the swarm, not the panels, when they speak to it.
+var _cap_root: Control
+var _cap_card: PanelContainer
+var _cap_phase: Label
+var _cap_meta: Label
+var _cap_said: Label
+var _cap_reply: Label
+var _cap_tags: Label
 var _t3_rows: Array = []
 
 # --- tallies, rebuilt from each state frame ------------------------------------------
@@ -277,9 +303,95 @@ func build(dashboard: SwarmDashboard) -> void:
 	_view_hole.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_view_hole.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	mid.add_child(_view_hole)
+	_build_captions(_view_hole)
 	_build_right(mid)
 	_build_bottom(root)
 	_refresh()
+
+
+func _build_captions(hole: Control) -> void:
+	"""Two lines under the map: what the operator said, and what the swarm answered.
+
+	Anchored to the bottom of the 3D viewport hole and IGNORE all the way down, so it
+	never eats a click meant for a robot. Hidden until there is something to read.
+	"""
+	_cap_root = Control.new()
+	_cap_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hole.add_child(_cap_root)
+	_cap_root.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	_cap_root.offset_top = -_px(13.0)
+	_cap_root.offset_bottom = -_px(1.2)
+
+	var centre := _hbox(_cap_root, 0.0)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	centre.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	centre.alignment = BoxContainer.ALIGNMENT_CENTER
+	_spring(centre)
+
+	_cap_card = PanelContainer.new()
+	_cap_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cap_card.size_flags_vertical = Control.SIZE_SHRINK_END
+	_cap_card.add_theme_stylebox_override("panel",
+		_style(Color(C_BG.r, C_BG.g, C_BG.b, 0.82), _px(1.1), _px(0.7), C_LINE, 4))
+	_cap_card.custom_minimum_size.x = _px(52.0)
+	centre.add_child(_cap_card)
+	_spring(centre)
+
+	var col := _vbox(_cap_card, _px(0.28))
+	var head := _hbox(col, _px(0.5))
+	_cap_phase = _text(head, "", 0.50, C_ACCENT, MONO, 0.22)
+	_spring(head)
+	_cap_meta = _text(head, "", 0.44, C_FAINT, MONO, 0.14)
+	_hline(col, C_LINE_SOFT)
+	_cap_said = _text(col, "", 0.62, C_BRIGHT, DISP, 0.0)
+	_cap_said.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_cap_reply = _text(col, "", 0.58, C_ACCENT, MONO, 0.0)
+	_cap_reply.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_cap_tags = _text(col, "", 0.46, C_DIM, MONO, 0.16)
+	_cap_root.visible = false
+
+
+func on_voice(msg: Dictionary) -> void:
+	"""One `t:"voice"` frame from the bridge. Sent on change, not at 10 Hz."""
+	if _cap_root == null:
+		return
+	var phase := str(msg.get("phase", "idle"))
+	var said := str(msg.get("said", ""))
+	var reply := str(msg.get("reply", ""))
+	var sectors: Array = msg.get("sectors", [])
+	var refused: Array = msg.get("rejected", [])
+
+	# The badge is live even with no text yet -- that is the whole point of showing
+	# LISTENING: the operator can see the channel heard them open their mouth.
+	var live := phase == "listening" or phase == "thinking" or phase == "speaking"
+	# Idle shows the card only while a caption is still up. The "HOLD U TO TALK" badge
+	# would otherwise sit over the map for the whole mission, which is a hint the
+	# operator needs once and a judge reads as clutter.
+	_cap_root.visible = live or said != "" or reply != ""
+	if not _cap_root.visible:
+		return
+
+	_cap_phase.text = PHASE_LABEL.get(phase, "")
+	_cap_phase.add_theme_color_override("font_color", PHASE_COLOUR.get(phase, C_DIM))
+	var ms := int(msg.get("latency_ms", 0))
+	_cap_meta.text = ("%d ms" % ms) if ms > 0 else ""
+
+	_cap_said.text = ("\u201c%s\u201d" % said) if said != "" else ""
+	_cap_said.visible = said != ""
+	_cap_reply.text = reply
+	_cap_reply.visible = reply != ""
+
+	var tags := ""
+	if not sectors.is_empty():
+		tags = "RETASKED  " + " ".join(PackedStringArray(sectors))
+	if not refused.is_empty():
+		if tags != "":
+			tags += "     "
+		tags += "REFUSED  " + " ".join(PackedStringArray(refused))
+	_cap_tags.text = tags
+	_cap_tags.visible = tags != ""
+	_cap_tags.add_theme_color_override("font_color",
+		C_WARN if not refused.is_empty() else C_DIM)
 
 
 func _build_top(root: Control) -> void:

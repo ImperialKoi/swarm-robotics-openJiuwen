@@ -16,6 +16,9 @@ api     = ["anthropic>=0.40"]             # D6, hivemind provider rung 3
 # No [visualize]: matplotlib is ~200 MB resident on an 8 GB machine, and archive
 # heatmaps go through viz/png.py, which is already stdlib-only.
 evo     = ["ribs>=0.7"]                   # D9, MAP-Elites
+# The operator voice console. PortAudio ships in the wheel; the mic runs as a thread
+# in the demo process, not a new resident one, so the 8 GB budget is unchanged.
+voice   = ["sounddevice>=0.4.6"]          # M-92, operator voice channel
 dev     = ["pytest>=8.0", "ruff>=0.6"]
 
 [build-system]

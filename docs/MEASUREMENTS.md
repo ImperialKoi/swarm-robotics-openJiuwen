@@ -5847,3 +5847,189 @@ Ruff clean. Full suite **669 passed** in 603.81 s (the same two pre-existing Num
 empty-slice warnings as M-90), including the native headless-Godot check
 `godot/tests/manual_drive_check.gd`, extended to cover the action key's one-press-one-action
 edge, the three-field echo, and the arrow-key handover on a rotor.
+
+## M-92 — the operator's voice channel: model survey and fused-turn latency (2026-09-19)
+
+Groundwork for the operator voice console. Everything here is a live OpenRouter check on
+the demo machine with the project's own key; nothing is quoted from a model card.
+
+### OpenRouter serves no Qwen omni model
+
+The full catalogue was enumerated (`/api/v1/models`, 447 entries) and filtered on
+`architecture.input_modalities`. **Every one of the 54 `qwen/*` models is text+image at
+most** — `qwen/qwen3-vl-{8b,30b,32b,235b}` are `in=[text, image] out=[text]`, and no Qwen
+entry accepts audio or emits it. One model id contains "omni" at all
+(`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`, `in=[text,audio,image,video]`,
+text out, free).
+
+**Only two models on OpenRouter have audio in the *output* modality** —
+`openai/gpt-audio` and `openai/gpt-audio-mini` — and neither accepts images, so neither
+can carry a fused voice+vision turn. That splits the channel in two by necessity, not by
+choice: one model that hears and sees, one that speaks.
+
+### The fused turn: speech + the operator's view + the blackboard, one request
+
+`google/gemini-3.5-flash`, structured output, 5.7 s of operator speech (WAV 16 kHz mono),
+the fog-limited orbit render of demo/seed 42 at t=150 s (900x560 PNG), and a blackboard
+line. Sector ids passed explicitly as a valid-id list.
+
+| effort | latency | cost | reasoning tokens | result |
+|---|---:|---:|---:|---|
+| `none` | — | — | — | **HTTP 400** — "Reasoning is mandatory for this endpoint" |
+| `minimal` | **1.82 s** | **$0.0029** | 0 | complete |
+| `low` | 2.28 s | $0.0053 | 261 | complete |
+
+`minimal` is both faster and cheaper; there is no reason to send `low`. `max_tokens` must
+still cover hidden reasoning tokens — at 400 the first run truncated mid-sentence with
+380 of 396 completion tokens spent on reasoning, the same failure M-88 recorded for
+astra. 1500 is the shipped budget.
+
+Live through `OmniProvider` end to end, 1.87 s: transcript verbatim, reply grounded in
+the *image* ("north ridge coverage is sparse"), a team goal, and **four directives, every
+sector id valid**. Passing the valid-id list is what fixed that — without it the same
+prompt answered `"A8"` and `"North Ridge"`, neither a real sector.
+
+### Speech out streams, and has to
+
+`openai/gpt-audio-mini` returns **HTTP 400 without `stream: true`** ("Audio output
+requires stream: true"). Streamed as `pcm16`, 24 kHz mono: **first audio chunk at
+0.54-0.58 s**, 7.5 s of speech fully generated in 1.27 s, 15 chunks. Playback verified
+with `/usr/bin/afplay`.
+
+**End of speech to first spoken word: ~2.4 s** (1.87 s fused + 0.54 s to first PCM),
+at **~$0.005 per operator turn** — a 15-turn demo is $0.08.
+
+### The detector's frames are the wrong image, measured
+
+The obvious input for the vision half was the detector's own 48x48 egocentric frames.
+They were exported (`scripts/export_frames.py`, seed 1, 51 frames) and inspected: they are
+**colour-coded rasters, not photographs**. `perception/raster.py` paints casualty and
+warm rubble deliberately confusable, so a VLM asked to read one is colour-thresholding
+exactly what `perception/classical.py` already thresholds — faster, and with no round
+trip. The frame that ships to the model is the operator's own
+`render3d.Renderer3D.render(world, orbit, fog=True)` instead: terrain, buildings and the
+swarm's revealed ground, at `victims=False`, so **no ground truth crosses the wire** and
+invariant #4 holds. `qwen/qwen3-vl-30b-a3b-instruct` reads that render in 1.81 s for
+$0.00009, which is what makes it affordable as the response team's vision specialist.
+
+### Checks
+
+Ruff clean. `tests/test_omni_provider.py` 11 passed, `tests/test_openai_provider.py`
+unchanged and green. No paid request in the suite — the live numbers above were taken by
+hand and are not re-run by `make check`.
+
+## M-93 — operator voice channel, integrated end to end (2026-09-19)
+
+M-92 measured the model paths in isolation. This is the shipped console driving a real
+`demo`/seed-42 mission at t=120 s, with a real `OmniProvider`, real speech synthesised by
+`/usr/bin/say` as the operator, and only the microphone faked. 48 sectors.
+
+### Three spoken turns, all live
+
+| turn | said | wall | outcome |
+|---|---|---:|---|
+| order | "Sector A6 is a priority. Push rescue teams there now." | **2.53 s** | `A6` high/rescue applied and claimed |
+| question | "How is the search going? Which areas still need coverage?" | **2.28 s** | answered, **nothing retasked** |
+| bad order | "Abandon every single sector on the map right now." | **2.39 s** | **4 directives refused**, spoken back |
+
+Transcripts came back verbatim on all three. The question was answered from the
+blackboard the swarm actually has -- "sixty-nine casualties confirmed; A8, B8, D8, E8
+have the lowest exploration, all under seventy percent" -- with no directives emitted,
+which is the distinction the schema's `goal`/`directives` split exists to make.
+
+**The refusal is the interesting one.** `hivemind/filter.py` rejected all four directives
+the model produced for "abandon everything" (F5, never leave the swarm nowhere to work),
+the console replaced the model's acknowledgement with the refusal rather than claiming
+success, and **all 48 sectors were still open afterwards**. A human at a microphone gets
+the same feasibility filter a model does.
+
+### Precedence holds against a live Tier 3
+
+At the moment of the spoken order Tier 3 had six directives of its own in force (E1, F8,
+F3, F6, A8, F5). The operator's `A6` was applied *alongside* them, not instead of them,
+and a subsequent Tier 3 attempt on `A6` was **blocked** by `held_sectors`. The team keeps
+every sector the operator did not name -- asserted for the reviewed path in
+`tests/test_voice_console.py`.
+
+### The renderer choice was forced by cost
+
+`render3d.Renderer3D.render` is **4.4-5.6 s per frame** on the demo map (900x560: 5.63 s;
+480x300: 4.42 s -- resolution barely matters, the cost is geometry). It is an offline
+verification tool, exactly as CLAUDE.md describes it, and putting it on the tick loop
+would freeze `DemoSim` outright.
+
+`render.MissionRenderer.views()` is **8.8 ms**, plus 22.1 ms to PNG-encode, at
+320x216 and 72 KB. That is what the console sends, once per utterance rather than per
+tick, and the hitch is invisible. It takes `[0]`, the swarm view; `[1]` is the god view
+and nothing reads it.
+
+### Checks
+
+Ruff clean. Full suite green, including the 19 new `tests/test_voice_console.py`, 11
+`tests/test_omni_provider.py`, 9 `tests/test_team_scout.py`, and two new cross-checks in
+`test_bridge_protocol.py` that parse `hud.gd` for `PHASE_LABEL`/`PHASE_COLOUR` drift
+against `contracts.schemas.VoicePhase`. `tests/test_no_ground_truth_leak.py` now guards
+`voice` alongside `nodes`, `control`, `hivemind` and `training`.
+
+**Determinism unaffected**: `--headless` builds no console (`voice=None` on every
+non-demo path), and seed 42 on the test fixture still hashes `a7cb3f81ea18f690`.
+
+The existing `EVENT_COLOURS` guard caught the three new event kinds before they could
+reach the wire without a dashboard handler, which is the failure mode CLAUDE.md warns
+about and the reason that test exists.
+
+## M-94 — push to talk on U, and the dashboard verified in real Godot (2026-09-19)
+
+M-92/M-93 recorded an always-open microphone cut by an energy gate. **That is the wrong
+default for a demo floor**: an open microphone in a hall hears the next table, the
+operator explaining the project to a judge, and the assistant's own reply coming back out
+of the laptop speaker -- and every one of those is a fused call that gets paid for and
+answered. Recording is now gated on holding **U** on the dashboard.
+
+Measured on demo/seed 42 with the real `Microphone` fed from a WAV, real models, and the
+key delivered exactly as the bridge delivers it:
+
+| | result |
+|---|---|
+| 1.0 s of room noise, key up | **0 turns, 0 audio captured, $0 spent** |
+| U down → speak → U up | **2.17 s**, transcript verbatim, sector claimed |
+
+The energy gate is kept behind `Microphone(push_to_talk=False)` and still tested -- it is
+the mode for a setup with no dashboard to press a key on.
+
+**The held key is a deadman.** `voice_key.gd` renews at 10 Hz (`SEND_EVERY` 0.1 s) and
+`mic.py` treats a press older than `KEY_TTL_S` 0.4 s as a release, so a crashed dashboard
+or a dropped socket closes the microphone instead of recording the room until
+`MAX_UTTERANCE_S`. `test_bridge_protocol.py` asserts the renew interval stays inside the
+deadman with room for two lost frames -- the same budget `control/manual.py` gives a held
+drive key. Pre-roll runs with the key *up* so the first syllable survives the press.
+
+### Godot is available on this machine, and the dashboard code now runs in it
+
+CLAUDE.md said the dashboard could not be run from the development environment. **It can**
+-- Godot 4.7.2 is at `/Applications/Godot.app/Contents/MacOS/Godot`, and the existing
+`godot/tests/*_check.gd` scripts have been running headlessly all along. The caption card
+is no longer unverified: `godot/tests/voice_check.gd` builds the real HUD and asserts the
+real `Label`s, covering the badge with no text yet, a full turn, a refusal's warning
+colour, every `VoicePhase` having a label *and* a colour, the card clearing, both mouse
+filters being `IGNORE`, and a short frame from an older simulator not crashing it. It
+prints `VOICE_CHECK_OK`; `tests/test_voice_console.py` runs it and skips if Godot is absent.
+
+**A new `class_name` needs a reimport.** `godot/.godot/global_script_class_cache.cfg` is
+gitignored and generated, so `VoiceKey` did not resolve until the project was reimported,
+and *every* native check failed with `Could not resolve class "SwarmDashboard"` -- a
+parse failure in one script poisons the whole cache, so the error names an innocent file.
+The fix is one command, needed after any new `class_name` and on any fresh clone:
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --headless --path godot --import
+```
+
+### Checks
+
+Ruff clean over `swarmmind tests scripts`. `tests/test_voice_console.py` 30 passed
+(6 new for the key and the deadman, plus the native Godot check),
+`test_bridge_protocol.py` 45 passed (4 new: the key reaches the console, a key with no
+console is harmless and does not leak into `bridge.commands`, `voice_key.gd` and
+`_mic_key` agree on message and key, and **U is bound in exactly one script** -- that
+last one caught `KEY_UP` matching a naive `KEY_U` substring search).
