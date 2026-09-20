@@ -5843,7 +5843,7 @@ untouched for every unit but a drone under the keys.
 
 ### Checks
 
-Ruff clean. Full suite **668 passed** (the same two pre-existing NumPy empty-slice
-warnings as M-90), including the native headless-Godot check
+Ruff clean. Full suite **669 passed** in 603.81 s (the same two pre-existing NumPy
+empty-slice warnings as M-90), including the native headless-Godot check
 `godot/tests/manual_drive_check.gd`, extended to cover the action key's one-press-one-action
 edge, the three-field echo, and the arrow-key handover on a rotor.
