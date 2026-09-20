@@ -111,7 +111,10 @@ const BINDINGS := [
 #: in `manual[2]`. **Mirrors OPERATOR_ACTION in swarmmind/contracts/schemas.py**, order
 #: and all, and test_bridge_protocol.py compares the two -- a code this side cannot name
 #: is a key the operator is told does something other than what it does.
-const ACTION_LABELS := ["", "PICK UP", "SET DOWN", "TAKE OFF", "LAND"]
+# Index is the OPERATOR_ACTION code in contracts/schemas.py; test_bridge_protocol.py
+# compares the two. DIG FIRST performs nothing on purpose -- it is the answer to "why
+# did SPACE do nothing", which is what made the key look broken over a buried casualty.
+const ACTION_LABELS := ["", "PICK UP", "SET DOWN", "TAKE OFF", "LAND", "DIG FIRST"]
 
 #: What replaced the mock's "solver diagnostics": what the swarm is doing, one row per
 #: activity code, in the order a casualty moves through them -- with idle last, because
@@ -1281,10 +1284,19 @@ func _action_hint() -> String:
 	"""
 	if host.drive == null:
 		return ""
+	var out := ""
+	# What the unit is holding comes first: it is true whatever the key would do, and an
+	# operator who forgot they are carrying somebody needs to see it without pressing
+	# anything. Plain text, no BBCode -- this string goes to `draw_string` on the
+	# viewport canvas, where a colour tag would render as literal characters. The badge
+	# is already drawn in C_WARN amber whenever the operator holds the unit.
+	var load := host.drive.carrying()
+	if load != "":
+		out += " · CARRYING " + load.to_upper()
 	var code := host.drive.action()
-	if code <= 0 or code >= ACTION_LABELS.size():
-		return ""
-	return " · SPACE: " + ACTION_LABELS[code]
+	if code > 0 and code < ACTION_LABELS.size():
+		out += " · SPACE: " + ACTION_LABELS[code]
+	return out
 
 
 func _draw_reticle(c: Control, p: Vector2, label: String) -> void:

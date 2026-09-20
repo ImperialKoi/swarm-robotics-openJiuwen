@@ -147,36 +147,58 @@ func run() -> void:
 	drive.on_state([0, 1.5])
 	assert(drive.action() == 0)          # an older simulator offers nothing, not garbage
 
-	# On a drone the arrow keys are the camera's, and the drive must not read them.
+	# On a drone LEFT/RIGHT turn the aircraft and UP/DOWN aim the camera. Turning the
+	# aircraft is what keeps the chase rig behind its heading, so W means "forward into
+	# the shot" and WASD is camera-relative without a second frame of reference.
 	d.follow = 3
 	drive._process(0.016)
 	drive.on_state([3, 1.5, 3])
 	assert(d.followed_is_drone() and drive.camera_owns_arrows())
-	n_act = d.sent.size()
+
+	# LEFT physically turns it: a drive command with a turn rate and no forward speed.
 	_key(KEY_LEFT, true)
+	drive._process(0.016)
+	assert(d.sent.back()["t"] == "drive", "LEFT did not reach the aircraft")
+	assert(d.sent.back()["w"] < 0.0, "LEFT did not turn the drone")
+	assert(d.sent.back()["v"] == 0.0, "turning also drove it forward")
+	assert(drive.mode() == ManualDrive.Mode.MANUAL)
+
+	# UP is still the camera's, and must not reach the aircraft.
+	n_act = d.sent.size()
+	_key(KEY_LEFT, false)
 	_key(KEY_UP, true)
 	drive._process(0.016)
-	assert(d.sent.size() == n_act, "the arrow keys drove a drone")
-	assert(drive.mode() == ManualDrive.Mode.HOLDING)
+	assert(d.sent.size() == n_act + 1, "releasing LEFT should send one stop")
+	assert(d.sent.back()["w"] == 0.0 and d.sent.back()["v"] == 0.0, "UP flew the drone")
 	var aim := d.pov_look
 	d._camera_keys(0.1)
-	assert(d.pov_look.x < aim.x and d.pov_look.y > aim.y, "the arrows did not aim the camera")
-	# ...while WASD still flies it.
+	assert(d.pov_look.y > aim.y, "UP did not tilt the camera")
+	assert(d.pov_look.x == 0.0, "the POV eye drifted off the heading")
+
+	# ...while WASD still flies it, now along the heading the arrows set.
 	_key(KEY_W, true)
 	drive._process(0.016)
 	assert(d.sent.back() == {"t": "drive", "robot": "r03", "v": 1.0, "w": 0.0})
 	_key(KEY_W, false)
-	_key(KEY_LEFT, false)
 	_key(KEY_UP, false)
 	drive._process(0.016)
 
-	# The chase rig takes the same keys, and the aim is dropped with the unit.
+	# The chase rig takes the tilt, and RIGHT turns the aircraft rather than walking the
+	# camera round it -- the rig is an offset from behind the heading, so it follows.
 	d.view_mode = SwarmDashboard.View.CHASE
 	var yaw := d.chase_yaw
+	var pitch := d.chase_pitch
 	_key(KEY_RIGHT, true)
 	d._camera_keys(0.1)
-	assert(d.chase_yaw > yaw)
+	assert(d.chase_yaw == yaw, "RIGHT walked the camera instead of turning the drone")
+	drive._process(0.016)
+	assert(d.sent.back()["w"] > 0.0, "RIGHT did not turn the drone in chase view")
 	_key(KEY_RIGHT, false)
+	_key(KEY_DOWN, true)
+	d._camera_keys(0.1)
+	assert(d.chase_pitch != pitch, "DOWN did not tilt the chase rig")
+	_key(KEY_DOWN, false)
+	drive._process(0.016)
 	d.view_mode = SwarmDashboard.View.POV
 	d.follow = 0
 	# What `_update_camera` does on the first frame of a new unit. Called directly: the

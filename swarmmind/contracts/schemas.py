@@ -79,6 +79,11 @@ OPERATOR_ACTION: dict[str, int] = {
     "set_down": 2,      # a carrier holding one: put it down here
     "take_off": 3,      # a landed rotor
     "land": 4,          # a rotor in flight, over ground it can set down on
+    # A carrier standing over a casualty the swarm has FOUND but not yet dug out. The
+    # key cannot lift it, and saying so is the point: silently doing nothing is what
+    # made the action key look broken. No ground truth escapes -- a HIDDEN casualty
+    # the swarm has not detected still offers `none`, exactly as before.
+    "dig_first": 5,     # a carrier over a casualty still under debris
 }
 
 #: actuator -> the display label the dashboard and the original spec use.

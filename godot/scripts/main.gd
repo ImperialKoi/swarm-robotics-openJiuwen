@@ -1762,33 +1762,37 @@ func _pov_bind(i: int) -> void:
 
 
 func _camera_keys(delta: float) -> void:
-	"""The arrow keys aim a drone's camera. Drones only, and only in a unit view.
+	"""Up and down aim a drone's camera. Drones only, and only in a unit view.
 
-	A ground unit looks where it is going, which is what the POV already shows and what
-	the drive keys already control. A drone does not: it crosses ground at 2x, it is
-	blind until it lands, and the whole reason to put one under the keys is to fly it
-	somewhere and *look* -- so it is the one chassis where aiming the camera is a second
-	control worth having, and the one that can spare the arrows to do it.
+	**Left and right no longer come here** -- they turn the aircraft, through
+	manual_drive.gd like any other drive key. They used to yaw the camera alone, which
+	left the drone pointable only with A/D and made the drive keys read as unrelated to
+	what was on screen: W drove along a heading the operator could not see. Turning the
+	aircraft keeps the chase rig behind its heading, so **W is always forward into the
+	shot** and WASD is camera-relative by construction.
+
+	Pitch stays a camera control because it has no equivalent on the aircraft: the
+	simulation is 2.5D and `world.height` is render-only, so there is nothing to tilt.
 
 	Both views take the keys, and each moves the rig it already has, so a key and a mouse
 	drag cannot end up disagreeing about where the camera is.
 	"""
 	if view_mode == View.ORBIT or not followed_is_drone():
 		return
-	var yaw := (1.0 if Input.is_physical_key_pressed(KEY_RIGHT) else 0.0) \
-		- (1.0 if Input.is_physical_key_pressed(KEY_LEFT) else 0.0)
 	var tilt := (1.0 if Input.is_physical_key_pressed(KEY_UP) else 0.0) \
 		- (1.0 if Input.is_physical_key_pressed(KEY_DOWN) else 0.0)
-	if yaw == 0.0 and tilt == 0.0:
+	if tilt == 0.0:
 		return
 	if view_mode == View.POV:
-		pov_look.x = clampf(pov_look.x + yaw * CAM_KEY_YAW * delta,
-			-POV_LOOK_YAW, POV_LOOK_YAW)
+		# Keep the eye on the heading. A standing yaw offset would reintroduce exactly
+		# the problem this change removes -- W driving somewhere other than ahead.
+		pov_look.x = 0.0
 		pov_look.y = clampf(pov_look.y + tilt * CAM_KEY_PITCH * delta,
 			POV_LOOK_DOWN, POV_LOOK_UP)
 	else:
-		# Unbounded like the drag, which walks all the way round the unit on purpose.
-		chase_yaw += yaw * CAM_KEY_YAW * delta
+		# No `chase_yaw` from the keys any more: the aircraft turns instead, and the
+		# chase rig is an offset from behind its heading, so it follows for free. The
+		# mouse drag still walks the shot all the way round.
 		# Up tilts the *shot* up, which drops the camera below the unit -- so it is the
 		# opposite sign to `chase_pitch`, which is how high the eye sits. Same limits as
 		# the drag, whose floor dips just under the anchor for the shot against the sky.

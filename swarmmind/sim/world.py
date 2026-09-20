@@ -1052,6 +1052,15 @@ class World:
             self.carrying[i] = vi
             self._emit("operator_action", f"{rid} picked up {v.id} in {self._sector_at(v.pos)}",
                        robot=rid, victim=v.id, sector=self._sector_at(v.pos), pos=tuple(v.pos))
+        elif code == OPERATOR_ACTION["dig_first"]:
+            # Deliberately changes nothing. The operator gets an answer instead of a
+            # key that appears dead: a carrier cannot lift a casualty still under
+            # debris, and a digger has to reach it first.
+            v = self.victims[vi]
+            self._emit("operator_action",
+                       f"{rid} cannot lift {v.id}: still under debris, needs a digger",
+                       robot=rid, victim=v.id, sector=self._sector_at(v.pos),
+                       pos=tuple(v.pos))
         elif code in (OPERATOR_ACTION["take_off"], OPERATOR_ACTION["land"]):
             # The latch only; `Mission` owns the airborne array and reads it next tick.
             self.operator_hover = code == OPERATOR_ACTION["take_off"]
@@ -1084,15 +1093,24 @@ class World:
         if self.actuator[i] != LANE_INDEX["gripper"]:
             return OPERATOR_ACTION["none"], -1
         best, best_d2 = -1, REACH_GRAB ** 2
+        buried, buried_d2 = -1, REACH_GRAB ** 2
         for vi, v in enumerate(self.victims):
-            if v.state != CLEARED:
-                continue
             d2 = float((self.pos[i, 0] - v.pos[0]) ** 2 + (self.pos[i, 1] - v.pos[1]) ** 2)
-            if d2 <= best_d2:
-                best, best_d2 = vi, d2
-        if best < 0:
-            return OPERATOR_ACTION["none"], -1
-        return OPERATOR_ACTION["pick_up"], best
+            if v.state == CLEARED:
+                if d2 <= best_d2:
+                    best, best_d2 = vi, d2
+            # **FOUND but still under debris.** Offering `none` here is what made the
+            # key look broken: the operator is standing on a casualty they can see on
+            # the dashboard and the key does nothing without saying why. `FOUND` means
+            # the swarm's own detector already resolved it, so naming it leaks nothing
+            # -- a HIDDEN casualty still falls through to `none` below.
+            elif v.state == FOUND and d2 <= buried_d2:
+                buried, buried_d2 = vi, d2
+        if best >= 0:
+            return OPERATOR_ACTION["pick_up"], best
+        if buried >= 0:
+            return OPERATOR_ACTION["dig_first"], buried
+        return OPERATOR_ACTION["none"], -1
 
     def _has_los(self, i: int, target: np.ndarray) -> bool:
         """Line of sight from robot ``i`` to a world point. Walls block, rubble does not."""

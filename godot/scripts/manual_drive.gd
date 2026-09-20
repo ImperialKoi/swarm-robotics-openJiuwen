@@ -26,7 +26,8 @@ extends Node
 ## badge offers -- so the label and the key cannot come apart.
 ##
 ## The badge that says who has the unit is drawn by hud.gd from `mode()` and `action()`,
-## next to the rest of the viewport frame's readouts.
+## next to the rest of the viewport frame's readouts, together with a CARRYING badge
+## whenever the simulator says the unit is holding a casualty.
 
 #: Physical keys, so the diamond sits under the same fingers on any keyboard layout.
 const KEYS_FWD := [KEY_W, KEY_UP]
@@ -36,12 +37,21 @@ const KEYS_RIGHT := [KEY_D, KEY_RIGHT]
 #: One press, one action. Polled like the rest, not bound in `_input`, so it can only
 #: fire on a unit this script is actually allowed to drive.
 const KEY_ACT := KEY_SPACE
-#: The arrow keys among the four above. **On a drone they belong to the camera instead**
-#: (main.gd `_camera_keys`) and this script must not read them: a drone is the one unit
-#: whose heading and whose best view point in different directions, and swinging the
-#: camera round a hovering rotor must not also yaw the rotor out from under it. On every
-#: other chassis they stay what they have always been -- WASD's other home.
+#: The arrow keys among the four above.
+#:
+#: **On a drone, left/right turn the aircraft and up/down aim the camera.** They used to
+#: do neither -- all four went to the camera (main.gd `_camera_keys`) -- which left the
+#: drone with no way to be pointed except A/D, and made WASD read as unrelated to what
+#: was on screen. Turning the aircraft instead keeps the chase camera behind its heading
+#: (`chase_yaw` is an offset from behind, not a compass bearing), so **W is always
+#: "forward into the shot"**: the drive keys become camera-relative by construction
+#: rather than by a second frame of reference nobody can see.
+#:
+#: Up/down stay with the camera because pitch has no equivalent on a 2.5D aircraft --
+#: the simulation is flat and `world.height` is render-only.
 const ARROW_KEYS := [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]
+#: The arrows a drone's camera keeps. Left/right go to the aircraft.
+const CAMERA_ARROWS := [KEY_UP, KEY_DOWN]
 
 #: Fraction of the unit's own turn rate that A/D ask for. Full rate is 2.0-3.5 rad/s: a
 #: scout at full rate turns 200 degrees a second, which from its own eye is a blur.
@@ -110,8 +120,17 @@ func action() -> int:
 	return int(_echo[2]) if _echo.size() >= 3 else 0
 
 
+func carrying() -> String:
+	"""The casualty the driven unit is holding, or "" -- the simulator's word.
+
+	A fourth `manual` field, added because SET DOWN only *implied* a load. An older
+	simulator sends three fields and this reads empty, which draws no badge.
+	"""
+	return str(_echo[3]) if _echo.size() >= 4 else ""
+
+
 func camera_owns_arrows() -> bool:
-	"""Whether the arrow keys are the camera's this frame rather than the drive's.
+	"""Whether the camera owns *up and down* this frame. Left/right are always the drive's.
 
 	Asked of the host, not worked out here: `main.gd` owns the followed unit and reads
 	its chassis off the state frame.
@@ -217,15 +236,17 @@ func _drive(v: float, w: float) -> void:
 func _is_drive_key(k: int) -> bool:
 	if k == KEY_ACT:
 		return true
-	if k in ARROW_KEYS and camera_owns_arrows():
+	if k in CAMERA_ARROWS and camera_owns_arrows():
 		return false
 	return k in KEYS_FWD or k in KEYS_BACK or k in KEYS_LEFT or k in KEYS_RIGHT
 
 
 func _any(keys: Array) -> bool:
-	var arrows_taken := camera_owns_arrows()
+	# Only up/down are ever withheld, and only on a drone. Left/right turn the aircraft
+	# on every chassis, which is what makes W mean "forward into the shot".
+	var tilt_taken := camera_owns_arrows()
 	for k in keys:
-		if arrows_taken and k in ARROW_KEYS:
+		if tilt_taken and k in CAMERA_ARROWS:
 			continue
 		if Input.is_physical_key_pressed(k):
 			return true

@@ -786,14 +786,20 @@ def test_state_carries_the_manual_echo_the_badge_is_drawn_from(payloads):
 
 
 def test_the_manual_echo_is_the_shape_the_dashboard_indexes():
-    """Three fields, and the third is a code the dashboard has a label for.
+    """Four fields: index, hold, action code, and the casualty being carried.
 
     The echo is built by hand rather than through a model, so nothing but this stops it
-    going back to two fields -- which fails in the quiet way: `action()` returns 0, the
-    badge offers nothing, and the key still works for whoever thinks to press it.
+    losing a field -- which fails in the quiet way: `action()` returns 0, the badge
+    offers nothing, and the key still works for whoever thinks to press it.
+
+    The fourth is additive. `manual_drive.gd` reads it with a length guard, so an older
+    simulator sending three draws no CARRYING badge rather than erroring.
     """
+    import numpy as np
+
     from swarmmind.contracts.schemas import OPERATOR_ACTION
     from swarmmind.control.manual import ManualOverride
+    from swarmmind.sim.robot import LANE_INDEX
     from swarmmind.sim.scenario import Scenario
     from swarmmind.sim.world import World
 
@@ -802,9 +808,16 @@ def test_the_manual_echo_is_the_shape_the_dashboard_indexes():
     assert manual.wire(w) == [], "nobody is driving"
     manual.receive(w, {"t": "drive", "robot": w.robot_ids[0], "v": 1.0, "w": 0.0})
     echo = manual.wire(w)
-    assert len(echo) == 3, f"the badge indexes three fields, the echo has {len(echo)}"
+    assert len(echo) == 4, f"the badge indexes four fields, the echo has {len(echo)}"
     assert echo[0] == 0 and echo[1] > 0.0
     assert echo[2] in set(OPERATOR_ACTION.values())
+    assert echo[3] == "", "an empty gripper is not carrying anybody"
+
+    # Carrying one names it, which is the whole point of the field.
+    i = int(np.nonzero(w.actuator == LANE_INDEX["gripper"])[0][0])
+    w.carrying[i] = 0
+    manual.receive(w, {"t": "drive", "robot": w.robot_ids[i], "v": 1.0, "w": 0.0})
+    assert manual.wire(w)[3] == w.victims[0].id
 
 
 def test_the_action_labels_match_the_dashboard():

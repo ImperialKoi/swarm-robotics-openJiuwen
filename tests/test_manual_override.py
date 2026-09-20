@@ -520,3 +520,73 @@ def test_native_dashboard_keys_badge_and_handoff(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "MANUAL_DRIVE_OK" in result.stdout, result.stdout + result.stderr
     assert "SCRIPT ERROR" not in result.stderr, result.stderr
+
+
+def test_space_picks_up_a_casualty_the_carrier_is_standing_on():
+    """The reported bug: stand a carrier on a casualty, press space, nothing happens."""
+    import numpy as np
+
+    from swarmmind.contracts.schemas import OPERATOR_ACTION
+    from swarmmind.control.manual import ManualOverride
+    from swarmmind.sim.robot import LANE_INDEX
+    from swarmmind.sim.scenario import Scenario
+    from swarmmind.sim.world import CARRIED, CLEARED, World
+
+    w = World(Scenario.load("test"), 42)
+    i = int(np.nonzero(w.actuator == LANE_INDEX["gripper"])[0][0])
+    v = w.victims[0]
+    v.state, v.buried, v.debris_remaining = CLEARED, False, 0.0
+    w.pos[i] = v.pos                                     # right on top of it
+
+    assert w.operator_offer(i) == OPERATOR_ACTION["pick_up"], "the badge does not offer it"
+    manual = ManualOverride(w)
+    manual.receive(w, {"t": "act", "robot": w.robot_ids[i]})
+    assert int(w.carrying[i]) == 0 and v.state == CARRIED, "space did not pick it up"
+    assert manual.wire(w)[3] == v.id, "the dashboard is not told what it is carrying"
+
+    # Pressing again sets it down rather than picking up a second one.
+    assert w.operator_offer(i) == OPERATOR_ACTION["set_down"]
+    manual.receive(w, {"t": "act", "robot": w.robot_ids[i]})
+    assert int(w.carrying[i]) == -1 and manual.wire(w)[3] == ""
+
+
+def test_a_buried_casualty_says_why_the_key_will_not_lift_it():
+    """Silence is what made the key look broken. `FOUND` is already known to the swarm."""
+    import numpy as np
+
+    from swarmmind.contracts.schemas import OPERATOR_ACTION
+    from swarmmind.control.manual import ManualOverride
+    from swarmmind.sim.robot import LANE_INDEX
+    from swarmmind.sim.scenario import Scenario
+    from swarmmind.sim.world import FOUND, World
+
+    w = World(Scenario.load("test"), 42)
+    i = int(np.nonzero(w.actuator == LANE_INDEX["gripper"])[0][0])
+    v = w.victims[0]
+    v.state, v.buried, v.debris_remaining = FOUND, True, 1.0
+    w.pos[i] = v.pos
+
+    assert w.operator_offer(i) == OPERATOR_ACTION["dig_first"]
+    seen = []
+    w._emit = lambda kind, text, **kw: seen.append(text)
+    ManualOverride(w).receive(w, {"t": "act", "robot": w.robot_ids[i]})
+    assert int(w.carrying[i]) == -1, "a buried casualty was lifted straight out of the rubble"
+    assert seen and "under debris" in seen[0], "the operator was told nothing"
+
+
+def test_a_casualty_the_swarm_has_not_found_still_offers_nothing():
+    """The offer must never reveal a HIDDEN casualty -- that is invariant #3."""
+    import numpy as np
+
+    from swarmmind.contracts.schemas import OPERATOR_ACTION
+    from swarmmind.sim.robot import LANE_INDEX
+    from swarmmind.sim.scenario import Scenario
+    from swarmmind.sim.world import HIDDEN, World
+
+    w = World(Scenario.load("test"), 42)
+    i = int(np.nonzero(w.actuator == LANE_INDEX["gripper"])[0][0])
+    v = w.victims[0]
+    v.state = HIDDEN
+    w.pos[i] = v.pos
+    assert w.operator_offer(i) == OPERATOR_ACTION["none"], (
+        "standing on an undetected casualty told the operator it was there")

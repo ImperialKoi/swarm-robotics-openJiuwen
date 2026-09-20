@@ -145,9 +145,19 @@ class ManualOverride:
 
     def wire(self, world) -> list:
         """The state frame's ``manual`` field: ``[robot index, seconds until autonomy,
-        action code]``, or empty. The dashboard's badge is drawn from this, not from its
-        own keys -- including the action hint, which is an `OPERATOR_ACTION` code."""
+        action code, carried casualty id or ""]``, or empty. The dashboard's badge is
+        drawn from this, not from its own keys -- including the action hint, which is an
+        `OPERATOR_ACTION` code.
+
+        **The fourth field is what the unit is holding.** `SPACE: SET DOWN` implied it
+        and nothing stated it, so an operator who picked a casualty up two minutes ago
+        had no way to see they were still carrying one -- and a carrier that silently
+        holds a casualty it never delivers is the failure the whole lane exists to
+        avoid. An older dashboard reads the first three and ignores this.
+        """
         i = self.active(world)
         if i < 0:
             return []
-        return [i, round(max(self._until - world.t, 0.0), 1), world.operator_offer(i)]
+        held = int(world.carrying[i])
+        return [i, round(max(self._until - world.t, 0.0), 1), world.operator_offer(i),
+                world.victims[held].id if held >= 0 else ""]
