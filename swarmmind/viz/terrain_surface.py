@@ -32,17 +32,6 @@ CLIFF_LAYERS = 5
 CLIFF_DROP = 15.0
 CLIFF_SHELF = 1.35
 
-#: How far the display ground continues past the map border, and how finely it is
-#: stepped. Wide enough that the far edge is deep in the shader's fog from the eagle
-#: camera, stepped coarsely because nothing out there is ever inspected closely.
-APRON_WIDTH_M = 140.0
-APRON_RINGS = 16
-#: Where the apron settles: a valley floor this far below the map's lowest corner.
-APRON_FLOOR_DROP = 7.0
-#: The haze the apron fades into, matching the shader's `fog_color` (0-1 RGB).
-APRON_HAZE = np.array([0.694, 0.725, 0.698])
-
-
 def _smoothstep(low, high, value):
     t = np.clip((value - low) / (high - low), 0, 1)
     return t * t * (3 - 2 * t)
@@ -374,88 +363,3 @@ class TerrainSurface:
         ids = (np.arange(len(xx))*4)[:, None]
         triangles = np.concatenate([ids+[0, 1, 2], ids+[1, 3, 2]]).astype(np.int32)
         return MeshArrays(vertices, triangles, colors, np.tile([0, 0, 1], (len(vertices), 1)))
-
-    def apron_arrays(self, width_m: float = APRON_WIDTH_M,
-                     rings: int = APRON_RINGS) -> MeshArrays:
-        """Ground continuing outward from the map border, so the crop does not float.
-
-        The map is a rectangle cut out of a valley, and without this the mesh ends in a
-        vertical skirt over the background colour: from the eagle camera the operator is
-        looking at a floating tile with a hard rectangular rim. Every border corner is
-        carried outward in ``rings`` steps, its height decaying toward a valley floor a
-        little below the map's own minimum and its colour fading toward the haze. The
-        shader's distance fog finishes the job, so the far edge dissolves into the sky
-        instead of ending against it.
-
-        Only display geometry: nothing here is read by simulation or perception, and the
-        map's own vertices are untouched, so grounding, parity and the sim are unchanged.
-        """
-        gx, gy = self.gw, self.gh
-        coords = ([(x, 0) for x in range(gx + 1)]
-                  + [(gx, y) for y in range(1, gy + 1)]
-                  + [(x, gy) for x in range(gx - 1, -1, -1)]
-                  + [(0, y) for y in range(gy - 1, 0, -1)])
-        xx = np.array([c[0] for c in coords])
-        yy = np.array([c[1] for c in coords])
-
-        base = np.stack([xx * self.cell, yy * self.cell, self.corners[yy, xx]], axis=-1)
-        base_colors = self.colors[yy, xx].copy()
-        # Smooth the border colours *along the loop* before they are stretched outward.
-        # Without this every border vertex paints a radial streak 180 m long -- the
-        # rim's pixel-to-pixel variation reads as spokes rather than as land.
-        for _ in range(4):
-            base_colors = (np.roll(base_colors, 1, axis=0) + 2.0 * base_colors
-                           + np.roll(base_colors, -1, axis=0)) * 0.25
-        base_normals = self.normals[yy, xx]
-        # Outward direction per border vertex: edge normal, diagonal at the corners.
-        out = np.zeros((len(xx), 2), dtype=float)
-        out[yy == 0] = (0.0, -1.0)
-        out[xx == gx] = (1.0, 0.0)
-        out[yy == gy] = (0.0, 1.0)
-        out[xx == 0] = (-1.0, 0.0)
-        corner = ((xx == 0) | (xx == gx)) & ((yy == 0) | (yy == gy))
-        if corner.any():
-            out[corner] = np.stack([
-                np.where(xx[corner] == 0, -1.0, 1.0),
-                np.where(yy[corner] == 0, -1.0, 1.0)], axis=-1)
-        out /= np.linalg.norm(out, axis=1, keepdims=True)
-
-        floor = self.minimum - APRON_FLOOR_DROP
-        haze = APRON_HAZE
-        steps = np.arange(1, rings + 1) * (width_m / rings)
-        # Height decays from the border value to the floor; colour fades to haze on a
-        # much shorter scale. The short colour fade is deliberate: stretching the rim's
-        # own colours 140 m outward paints radial spokes, so only a narrow rim keeps
-        # them and the rest is land-coloured haze the shader's fog can dissolve.
-        hdecay, cdecay = width_m * 0.50, width_m * 0.16
-        verts, cols, norms = [base], [base_colors], [base_normals]
-        for d in steps:
-            ht = np.exp(-d / hdecay)
-            ct = 1.0 - np.exp(-d / cdecay)
-            z = floor + (base[:, 2] - floor) * ht
-            v = base.copy()
-            v[:, 0] += out[:, 0] * d
-            v[:, 1] += out[:, 1] * d
-            v[:, 2] = z
-            # A little broad noise so the haze reads as ground rather than a gradient.
-            tone = 0.94 + 0.12 * _noise(v[:, 0] + 61.0, v[:, 1] + 23.0, 47.0)
-            c = base_colors.copy()
-            c[:, :3] = c[:, :3] * (1.0 - ct) + (haze[None, :] * tone[:, None]) * ct
-            n = base_normals * (1.0 - ct) + np.array([0.0, 0.0, 1.0])[None, :] * ct
-            n /= np.linalg.norm(n, axis=1, keepdims=True)
-            verts.append(v)
-            cols.append(c)
-            norms.append(n)
-        vertices = np.concatenate(verts)
-        colors = np.concatenate(cols)
-        normals = np.concatenate(norms)
-        n = len(base)
-        tris = []
-        for r in range(rings):
-            a = r * n + np.arange(n)
-            b = a + n
-            nxt = np.roll(np.arange(n), -1)
-            tris.append(np.stack([a, b, a[nxt]], axis=-1))
-            tris.append(np.stack([a[nxt], b, b[nxt]], axis=-1))
-        triangles = np.concatenate(tris).astype(np.int32)
-        return MeshArrays(vertices, triangles, colors, normals)

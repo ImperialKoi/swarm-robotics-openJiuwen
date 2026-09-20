@@ -228,9 +228,6 @@ var mk_body: MultiMeshInstance3D
 var mk_burial: MultiMeshInstance3D
 var mk_hazard: MeshInstance3D
 var ground: TerrainStream
-#: Static display mesh continuing the terrain past the map border, so the crop does
-#: not end in a vertical skirt over the background colour.
-var apron: MeshInstance3D
 var _terrain_revision := -1
 var bots: UnitFleet
 var mat: ShaderMaterial
@@ -731,30 +728,6 @@ func _build_ground() -> void:
 	ground = TerrainStream.new()
 	add_child(ground)
 	ground.setup(surface, gw, gh, mat)
-	_build_apron()
-
-
-func _build_apron() -> void:
-	"""The valley the map is a crop of: terrain continuing past the border.
-
-	Same shader as the ground so the distance fog matches, but with fog-of-war and the
-	sector wash off -- both textures describe the map, and this is outside it. Without
-	this the terrain ends in a vertical skirt over the flat background colour and the
-	operator is looking at a floating tile with a hard rectangular rim.
-	"""
-	if apron != null:
-		apron.queue_free()
-	apron = MeshInstance3D.new()
-	apron.mesh = surface.build_apron_mesh()
-	var amat := ShaderMaterial.new()
-	amat.shader = mat.shader
-	amat.set_shader_parameter("fog_tex", fog_tex)
-	amat.set_shader_parameter("sector_tex", sector_tex)
-	amat.set_shader_parameter("map_size", Vector2(map_w, map_h))
-	amat.set_shader_parameter("show_sectors", false)
-	amat.set_shader_parameter("fog_dim", 1.0)
-	apron.material_override = amat
-	add_child(apron)
 
 
 func _build_water() -> void:
