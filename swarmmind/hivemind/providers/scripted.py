@@ -24,6 +24,13 @@ CONFIG = Path(__file__).resolve().parents[3] / "assets" / "scenarios" / (
 
 class ScriptedProvider:
     name = "scripted"
+    #: Runs on the caller's thread, not a worker. This provider is instant and
+    #: deterministic, and `HivemindNode` starts every rung on a thread so a *model* can
+    #: think across ticks. For a provider that never blocks, that thread buys nothing
+    #: and costs determinism: which tick the result lands on was decided by OS
+    #: scheduling, so two identical seed-42 runs could issue different directives.
+    #: Invariant #6 covers Tier 3 too (`test_mission` runs this provider).
+    synchronous = True
 
     def __init__(self, world, tracker=None, config: dict | None = None) -> None:
         self.world = world

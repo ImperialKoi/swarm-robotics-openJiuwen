@@ -221,9 +221,18 @@ class VictimReportTracker:
         see plainly whether anyone is there -- which is exactly what a real machine at
         two metres could do, and is why chasing a false positive costs a trip rather
         than costing the mission.
+
+        **Candidates resolve too, not only confirmed reports.** They used to be
+        excluded, and that exclusion was a recall hole with a mission-sized cost: a
+        robot can stand *on top of* a candidate -- 0.1 m away, measured -- and learn
+        nothing, because nothing had yet corroborated the sighting. On seed 42, 21 of
+        110 casualties finished the mission hidden with a report 0.3-1.8 m from them
+        and robots passing within 0.1-3 m: the evidence was all there and no one was
+        allowed to look. Resolution is a physical act, not a promotion; a candidate
+        that a ground robot reaches is settled the same way a confirmed one is.
         """
         out: list[tuple[Report, bool, int]] = []
-        open_reports = [r for r in self.reports if r.state == CONFIRMED]
+        open_reports = [r for r in self.reports if r.state in (CANDIDATE, CONFIRMED)]
         if not open_reports:
             return out
         # This is a shared resolution, requiring both a ground inspection and a link.

@@ -183,7 +183,7 @@ victims:
   # rescued, so digging becomes a real stage at no cost, and 0.07 is where it starts
   # costing (M-66).
   clear_rate: 0.12
-  carry_speed_factor: 0.7
+  carry_speed_factor: 1.0
 
 hazard:
   ignite_t: 90.0
