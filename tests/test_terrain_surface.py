@@ -186,18 +186,33 @@ def test_river_current_coordinates_follow_downstream_bends():
     assert not np.array_equal(first, later)
 
 
-def test_coarse_mesh_reduces_geometry_and_skirts_close_perimeter():
+def test_coarse_mesh_reduces_geometry_and_outer_cliff_replaces_map_skirt():
     surface = _surface(np.ones((32, 32)))
     fine = surface.tile_arrays(0, 0, 32, 32, 1)
     coarse = surface.tile_arrays(0, 0, 32, 32, 8)
     assert len(coarse.triangles) < len(fine.triangles)/20
-    assert coarse.vertices[:, 2].min() == surface.minimum-1
+    # The true map edge has no vertical skirt: it is closed by cliff_arrays().
+    assert coarse.vertices[:, 2].min() == surface.minimum
     edges = np.sort(np.concatenate([coarse.triangles[:, [0, 1]], coarse.triangles[:, [1, 2]],
                                     coarse.triangles[:, [2, 0]]]), axis=1)
     unique, counts = np.unique(edges, axis=0, return_counts=True)
     boundary = unique[counts == 1]
-    # Only the underside remains open; no cracks along terrain or skirt sides.
-    assert (coarse.vertices[boundary, 2] == surface.minimum-1).all()
+    # The top terrain itself remains a clean open perimeter for the cliff to join.
+    assert (coarse.vertices[boundary, 2] == surface.minimum).all()
+
+
+def test_outer_cliff_is_continuous_layered_geometry_on_every_map_edge():
+    surface = _surface(np.arange(12 * 16, dtype=float).reshape(12, 16) * .03)
+    cliff = surface.cliff_arrays()
+    # Five terraces yield a proper face rather than a vertically stretched skirt.
+    perimeter = 2 * (surface.gw + surface.gh)
+    assert len(cliff.vertices) == perimeter * 6
+    assert len(cliff.triangles) == perimeter * 2 * 5
+    # The lower rings project outside each of the four original bounds.
+    bottom = cliff.vertices[-perimeter:]
+    assert bottom[:, 0].min() < 0 and bottom[:, 0].max() > surface.gw * surface.cell
+    assert bottom[:, 1].min() < 0 and bottom[:, 1].max() > surface.gh * surface.cell
+    assert bottom[:, 2].max() < cliff.vertices[:perimeter, 2].max()
 
 
 def test_godot_port_keeps_geometry_contract():
@@ -208,6 +223,7 @@ def test_godot_port_keeps_geometry_contract():
     assert "const CLEARANCE := 0.045" in source
     assert "if u + v <= 1.0:" in source
     assert "a + width, a + 1, a + 1, a + width, a + width + 1" in source
+    assert "func build_cliff_mesh()" in source
 
 
 @pytest.mark.parametrize("cell", [0, -1, float("nan")])

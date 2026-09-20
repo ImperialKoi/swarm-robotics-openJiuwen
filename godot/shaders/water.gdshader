@@ -33,9 +33,13 @@ void fragment() {
 	float ribbons = pow(max(0.0, sin(t * 1.9 + bend)), 10.0);
 	float pulse = 0.5 + 0.5 * sin(s * 0.64 - TIME * 1.15 + sin(t * 0.8));
 	float ripple = pow(max(0.0, sin(s * 1.7 - TIME * 2.1 + bend)), 12.0);
+	// Broad water has no preferred channel direction; these slow rings keep lakes
+	// animated and fade them toward the deep centre, leaving a shore wash/foam line.
+	float shore = pow(1.0 - blend, 2.0);
+	float rings = pow(max(0.0, sin(s * 0.37 + t * 0.61 - TIME * 0.72 + sin(t * 0.23))), 18.0);
 	float detail = 1.0 - smoothstep(0.6, 2.0, max(fwidth(s * 1.7), fwidth(t * 1.9)));
-	float glint = ribbons * (0.025 + 0.075 * pulse) + ripple * 0.035;
-	float foam = pow(1.0 - blend, 3.0) * ribbons * (0.12 + 0.16 * pulse);
+	float glint = ribbons * (0.025 + 0.075 * pulse) + ripple * 0.035 + rings * shore * 0.055;
+	float foam = shore * ((1.0 - blend) * ribbons * (0.12 + 0.16 * pulse) + rings * 0.10);
 	water_color += vec3(glint * detail);
 	water_color = mix(water_color, vec3(0.78, 0.83, 0.73), foam * detail);
 	vec3 base = water_color * mix(0.26, 1.0, seen);

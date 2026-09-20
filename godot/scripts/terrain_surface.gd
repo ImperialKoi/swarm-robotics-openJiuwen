@@ -16,6 +16,9 @@ const FLIGHT_CLEARANCE := 8.0
 const FLIGHT_SLOPE := 0.5
 const FLIGHT_FOOTPRINT := 2.5
 const FLIGHT_MAX_STRIDE := 8
+const CLIFF_LAYERS := 5
+const CLIFF_DROP := 15.0
+const CLIFF_SHELF := 1.35
 
 # How far the display ground continues past the map border, and how finely it is
 # stepped. Y-up port of the Python constants of the same names.
@@ -425,7 +428,7 @@ func build_mesh(x0: int, y0: int, x1: int, y1: int, stride: int = 1) -> ArrayMes
 		for x in range(width - 1):
 			var a := y * width + x
 			indices.append_array([a, a + width, a + 1, a + 1, a + width, a + width + 1])
-	# Full-depth skirts close mixed LOD seams; shared top corners never move on rebuild.
+	# Full-depth skirts close mixed LOD seams. The shared cliff owns the true map rim.
 	var perimeter := PackedInt32Array()
 	for x in range(width):
 		perimeter.append(x)
@@ -435,6 +438,14 @@ func build_mesh(x0: int, y0: int, x1: int, y1: int, stride: int = 1) -> ArrayMes
 		perimeter.append((ys.size() - 1) * width + x)
 	for y in range(ys.size() - 2, 0, -1):
 		perimeter.append(y * width)
+	var seam := PackedInt32Array()
+	for index in perimeter:
+		var point := vertices[index]
+		if point.x > 0.0 and point.x < gw * cell and point.z > 0.0 and point.z < gh * cell:
+			seam.append(index)
+	perimeter = seam
+	if perimeter.is_empty():
+		return _make_mesh(vertices, mesh_colors, mesh_normals, uv, indices)
 	var low := vertices.size()
 	for index in perimeter:
 		var bottom := vertices[index]
@@ -449,6 +460,52 @@ func build_mesh(x0: int, y0: int, x1: int, y1: int, stride: int = 1) -> ArrayMes
 		var next := (i + 1) % perimeter.size()
 		indices.append_array([perimeter[i], perimeter[next], low + i,
 			perimeter[next], low + next, low + i])
+	return _make_mesh(vertices, mesh_colors, mesh_normals, uv, indices)
+
+
+func build_cliff_mesh() -> ArrayMesh:
+	# A single, terraced escarpment surrounds the whole map.  This is deliberately
+	# separate from tile skirts, which only close transient LOD seams.
+	var rim := PackedVector2Array()
+	for x in range(gw + 1):
+		rim.append(Vector2(x, 0))
+	for y in range(1, gh + 1):
+		rim.append(Vector2(gw, y))
+	for x in range(gw - 1, -1, -1):
+		rim.append(Vector2(x, gh))
+	for y in range(gh - 1, 0, -1):
+		rim.append(Vector2(0, y))
+	var vertices := PackedVector3Array()
+	var mesh_colors := PackedColorArray()
+	var mesh_normals := PackedVector3Array()
+	var uv := PackedVector2Array()
+	var indices := PackedInt32Array()
+	var count := rim.size()
+	for layer in range(CLIFF_LAYERS + 1):
+		var f := float(layer) / CLIFF_LAYERS
+		for point in rim:
+			var x := int(point.x)
+			var y := int(point.y)
+			var outward := Vector2(-1.0 if x == 0 else (1.0 if x == gw else 0.0),
+				-1.0 if y == 0 else (1.0 if y == gh else 0.0)).normalized()
+			var ledge := f * CLIFF_SHELF + 0.22 * sin((x + y * 1.73) * 0.47 + layer * 1.9) * f
+			var top := _corner(x, y)
+			vertices.append(Vector3(x * cell + outward.x * ledge,
+				top - f * CLIFF_DROP - 0.18 * sin(x * 0.31 + y * 0.19 + layer),
+				y * cell + outward.y * ledge))
+			var band := 0.5 + 0.5 * sin(layer * 2.4 + top * 0.65)
+			mesh_colors.append(Color(0.29 + band * 0.09, 0.255 + band * 0.07,
+				0.205 + band * 0.045, 1.0))
+			mesh_normals.append(Vector3.UP)
+			uv.append(Vector2(float(x) / gw, float(y) / gh))
+	for layer in range(CLIFF_LAYERS):
+		for i in range(count):
+			var next := (i + 1) % count
+			var a := layer * count + i
+			var b := layer * count + next
+			var c := a + count
+			var d := b + count
+			indices.append_array([a, c, b, b, c, d])
 	return _make_mesh(vertices, mesh_colors, mesh_normals, uv, indices)
 
 

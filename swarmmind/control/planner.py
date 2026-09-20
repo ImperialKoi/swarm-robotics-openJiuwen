@@ -250,8 +250,15 @@ class NavSet:
         # Flight crosses disconnected ground regions. Keep the world's rotor mask
         # for landing safety; only its route/bid fields use open airspace.
         airspace = np.ones(world.shape, dtype=bool)
-        airspace[[0, -1], :] = False
-        airspace[:, [0, -1]] = False
+        # A rotor can cross terrain but not the map's rendered escarpment.  Use the
+        # same two-cell safety corridor as chassis passability, so a flow field never
+        # offers an edge-hugging route that collision must subsequently reject.
+        from ..sim.world import EDGE_CLEARANCE_CELLS
+        edge = EDGE_CLEARANCE_CELLS
+        airspace[:edge, :] = False
+        airspace[-edge:, :] = False
+        airspace[:, :edge] = False
+        airspace[:, -edge:] = False
         self.nav = [
             NavFields(airspace if chassis == "rotor" else world.chassis_passable[i],
                       world.cell, factor, threshold=threshold,

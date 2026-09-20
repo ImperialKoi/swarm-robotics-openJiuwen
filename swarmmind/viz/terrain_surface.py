@@ -26,6 +26,11 @@ FLIGHT_CLEARANCE = 8.0
 FLIGHT_SLOPE = 0.5
 FLIGHT_FOOTPRINT = 2.5
 FLIGHT_MAX_STRIDE = 8
+# The playable heightfield ends at this rim.  These values are display-only: the
+# simulator keeps its flat, finite map and supplies the authoritative collision.
+CLIFF_LAYERS = 5
+CLIFF_DROP = 15.0
+CLIFF_SHELF = 1.35
 
 #: How far the display ground continues past the map border, and how finely it is
 #: stepped. Wide enough that the far edge is deep in the shader's fog from the eagle
@@ -294,8 +299,14 @@ class TerrainSurface:
         a, b, c, d = ids[:-1, :-1].ravel(), ids[:-1, 1:].ravel(), ids[1:, :-1].ravel(), ids[1:, 1:].ravel()
         triangles = np.concatenate([np.stack([a, b, c], -1), np.stack([b, d, c], -1)])
         if skirts:
-            # Full-depth skirts close mixed LOD boundaries and the map's cutaway rim.
+            # Keep LOD-seam skirts, but leave the actual map perimeter to the shared
+            # terraced cliff mesh.  Otherwise its top metre would still read as a
+            # stretched vertical wall before the rock strata begin.
             perimeter = np.r_[ids[0], ids[1:, -1], ids[-1, -2::-1], ids[-2:0:-1, 0]]
+            px, py = (vertices[perimeter, 0] / self.cell).round().astype(int), (vertices[perimeter, 1] / self.cell).round().astype(int)
+            perimeter = perimeter[(px != 0) & (px != self.gw) & (py != 0) & (py != self.gh)]
+            if not len(perimeter):
+                return MeshArrays(vertices, triangles.astype(np.int32), colors, normals)
             bottom = vertices[perimeter].copy()
             bottom[:, 2] = self.minimum - 1.0
             low = np.arange(len(bottom)) + len(vertices)
@@ -305,6 +316,50 @@ class TerrainSurface:
             colors = np.concatenate([colors, colors[perimeter]*[.68, .68, .68, 1]])
             normals = np.concatenate([normals, normals[perimeter]])
         return MeshArrays(vertices, triangles.astype(np.int32), colors, normals)
+
+    def cliff_arrays(self):
+        """One continuous, terraced rock face around all four outside map edges.
+
+        Tile skirts still hide temporary mixed-LOD seams, but this is the visible
+        boundary: each descending ring moves outward before it drops.  It avoids the
+        old ``copy top vertices, lower z`` look and gives the rim readable strata from
+        every orbit direction.
+        """
+        # Clockwise, with every lattice corner exactly once.
+        xx = np.r_[np.arange(self.gw + 1), np.full(self.gh, self.gw),
+                   np.arange(self.gw - 1, -1, -1), np.zeros(max(self.gh - 1, 0), int)]
+        yy = np.r_[np.zeros(self.gw + 1, int), np.arange(1, self.gh + 1),
+                   np.full(self.gw, self.gh), np.arange(self.gh - 1, 0, -1)]
+        top = self.corners[yy, xx]
+        outward = np.column_stack([
+            np.where(xx == 0, -1.0, np.where(xx == self.gw, 1.0, 0.0)),
+            np.where(yy == 0, -1.0, np.where(yy == self.gh, 1.0, 0.0)),
+        ])
+        outward /= np.maximum(np.linalg.norm(outward, axis=1, keepdims=True), 1.0)
+        rings, cols = [], []
+        for layer in range(CLIFF_LAYERS + 1):
+            f = layer / CLIFF_LAYERS
+            # Slightly irregular ledges break the silhouette without opening seams.
+            ledge = f * CLIFF_SHELF + .22 * np.sin((xx + yy * 1.73) * .47 + layer * 1.9) * f
+            rings.append(np.column_stack([xx*self.cell + outward[:, 0]*ledge,
+                                          yy*self.cell + outward[:, 1]*ledge,
+                                          top - f*CLIFF_DROP - .18*np.sin(xx*.31 + yy*.19 + layer)]))
+            band = .5 + .5*np.sin(layer * 2.4 + top * .65)
+            cols.append(np.array([.29, .255, .205])
+                        + band[:, None]*np.array([.09, .07, .045]))
+        vertices = np.concatenate(rings)
+        colors = np.concatenate(cols)
+        n = len(xx)
+        triangles = []
+        for layer in range(CLIFF_LAYERS):
+            a = layer*n + np.arange(n)
+            b = layer*n + (np.arange(n)+1) % n
+            c, d = a+n, b+n
+            triangles.extend(np.column_stack([a, c, b]))
+            triangles.extend(np.column_stack([b, c, d]))
+        normals = np.tile(np.array([0.0, 0.0, 1.0]), (len(vertices), 1))
+        return MeshArrays(vertices, np.asarray(triangles, dtype=np.int32),
+                          np.column_stack([colors, np.ones(len(colors))]), normals)
 
     def water_arrays(self, x0: int, y0: int, x1: int, y1: int):
         """Full-resolution wet mask at every LOD: a coarse tile cannot erase a ford."""

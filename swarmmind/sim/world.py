@@ -56,6 +56,10 @@ ESCAPE_SPEED_FACTOR = 0.3
 #: Must match control.planner.NavFields' factor -- casualty placement checks
 #: reachability on the same grid the flow fields are built from.
 NAV_DOWNSAMPLE = 4
+# Two cell-centres remain between a planned path and the outer escarpment.  This is
+# intentionally shared by ground and rotor route fields: flying clears obstacles, not
+# the physical edge of the world.
+EDGE_CLEARANCE_CELLS = 2
 
 #: Endurance floor as a multiple of one mission of continuous movement. 1.15 rather than
 #: 1.0 because a robot that finishes with exactly zero has spent the endgame unable to
@@ -271,6 +275,10 @@ class World:
         for i, name in enumerate(CHASSIS):
             max_slope, max_wade, _ = CHASSIS_LIMITS[name]
             out[i] = self.passable & (self.slope <= max_slope) & (self.water <= max_wade)
+            out[i, :EDGE_CLEARANCE_CELLS] = False
+            out[i, -EDGE_CLEARANCE_CELLS:] = False
+            out[i, :, :EDGE_CLEARANCE_CELLS] = False
+            out[i, :, -EDGE_CLEARANCE_CELLS:] = False
         return out
 
     # ------------------------------------------------------------------ init helpers
@@ -698,8 +706,12 @@ class World:
         # Flight clears everything underneath it.
         if allow_airborne:
             ok |= self.airborne[:, None]
-        ok &= ((px >= 0) & (py >= 0)
-               & (px <= self.scn.map.width_m) & (py <= self.scn.map.height_m))
+        # The rendered outer rim is a real drop, not a driveable extension of the
+        # heightfield.  Keep every body footprint inside its radius on all four sides;
+        # this also constrains airborne rotors, whose old exception only bypasses
+        # terrain below them, never the map boundary.
+        ok &= ((px >= r) & (py >= r)
+               & (px <= self.scn.map.width_m-r) & (py <= self.scn.map.height_m-r))
         return ~ok.all(axis=1)
 
     # ------------------------------------------------------------------ subsystems
