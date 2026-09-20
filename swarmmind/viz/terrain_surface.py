@@ -32,6 +32,7 @@ CLIFF_LAYERS = 5
 CLIFF_DROP = 15.0
 CLIFF_SHELF = 1.35
 
+
 def _smoothstep(low, high, value):
     t = np.clip((value - low) / (high - low), 0, 1)
     return t * t * (3 - 2 * t)
