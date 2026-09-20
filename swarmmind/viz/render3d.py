@@ -185,6 +185,12 @@ class Renderer3D:
         simplifies distant tiles. The cache only exists for this offline renderer;
         the live equivalent also unloads tiles after they leave the camera frustum.
         """
+        # Draw the one-piece outer escarpment before the tiles: terrain then naturally
+        # hides its top seam while its layered faces remain visible beyond every edge.
+        cliff = self.surface.cliff_arrays()
+        colors = self._world_colors(world, cliff.vertices, cliff.colors[:, :3]*255, fog, sectors)
+        raster_triangles(img, zbuf, cam, cliff.vertices, cliff.triangles, colors,
+                         atmosphere=True, shaded=True, two_sided=True)
         forward = cam.target - cam.pos
         close = np.linalg.norm(forward) < 50
         forward /= np.linalg.norm(forward)

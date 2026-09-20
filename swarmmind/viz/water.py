@@ -36,8 +36,13 @@ def surface_color(frame, depth, time=0.0):
     ribbons = np.maximum(0, np.sin(t*1.9+bend))**10
     pulse = .5+.5*np.sin(s*.64-time*1.15+np.sin(t*.8))
     ripple = np.maximum(0, np.sin(s*1.7-time*2.1+bend))**12
+    # Slow cross-current rings keep broad lakes alive too, where the channel frame
+    # has no meaningful downstream direction.  Their strength fades into deep water.
+    shore = (1-blend)**2
+    rings = np.maximum(0, np.sin(s*.37+t*.61-time*.72 + np.sin(t*.23)))**18
     glint = ribbons*(.025+.075*pulse) + ripple*.035
-    foam = (1-blend)**3 * ribbons * (.12+.16*pulse)
+    glint += rings * shore * .055
+    foam = shore * ((1-blend) * ribbons * (.12+.16*pulse) + rings*.10)
     rgb += glint[..., None]
     rgb += (np.array([.78, .83, .73])-rgb)*foam[..., None]
     return rgb

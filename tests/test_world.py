@@ -39,6 +39,18 @@ def test_map_is_not_mostly_wall(world):
     assert 0.55 < frac < 0.98, f"passable fraction {frac:.2f} outside a usable range"
 
 
+def test_navigation_and_collision_keep_every_chassis_inside_cliff_rim(world):
+    # Ground route fields inherit chassis passability; aircraft get their own open
+    # airspace field. Both must reserve the outer cliff corridor.
+    assert not world.chassis_passable[:, :2, :].any()
+    assert not world.chassis_passable[:, -2:, :].any()
+    assert not world.chassis_passable[:, :, :2].any()
+    assert not world.chassis_passable[:, :, -2:].any()
+    x = np.full(world.n, .1)
+    y = np.full(world.n, world.scn.map.height_m * .5)
+    assert world._collides(x, y).all()
+
+
 def test_all_four_lanes_present(world, scn):
     counts = world.lane_counts()
     assert set(counts) == set(LANES)

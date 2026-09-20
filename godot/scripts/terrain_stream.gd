@@ -11,6 +11,7 @@ const MAX_BUILDS := 2
 var surface: TerrainSurface
 var _material: ShaderMaterial
 var _water_material: ShaderMaterial
+var _cliff: MeshInstance3D
 var _tiles: Array[Dictionary] = []
 var _resident: Dictionary = {}
 var _visible: Dictionary = {}
@@ -25,6 +26,11 @@ func setup(source: TerrainSurface, width: int, height: int, material: ShaderMate
 	_water_material.shader = load("res://shaders/water.gdshader")
 	for child in get_children():
 		child.queue_free()
+	_cliff = MeshInstance3D.new()
+	_cliff.mesh = surface.build_cliff_mesh()
+	_cliff.material_override = material
+	_cliff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_cliff)
 	_tiles.clear()
 	_resident.clear()
 	_visible.clear()
