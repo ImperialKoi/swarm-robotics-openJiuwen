@@ -313,13 +313,6 @@ const CHASE_CLEAR := 0.7
 const CHASE_POS_RATE := 14.0
 const CHASE_YAW_RATE := 5.0
 
-#: Where a drone's first-person camera is looking, relative to the unit's own heading:
-#: (yaw, pitch) in radians, both zero for everything else. The arrow keys move it --
-#: see `_camera_keys` for why a rotor is the one chassis that gets them.
-var pov_look := Vector2.ZERO
-#: Which robot `pov_look` belongs to, so swinging the camera round one drone does not
-#: leave the next unit picked up staring off at nothing.
-var _pov_of := -1
 #: Radians a second the arrow keys swing a drone's camera. Slower than a mouse drag on
 #: purpose: a key held is a shot being composed, not a glance.
 const CAM_KEY_YAW := 1.2
@@ -330,6 +323,14 @@ const CAM_KEY_PITCH := 0.9
 const POV_LOOK_YAW := 2.2
 const POV_LOOK_DOWN := -1.1
 const POV_LOOK_UP := 0.6
+
+#: Where a drone's first-person camera is looking, relative to the unit's own heading:
+#: (yaw, pitch) in radians, both zero for everything else. The arrow keys move it --
+#: see `_camera_keys` for why a rotor is the one chassis that gets them.
+var pov_look := Vector2.ZERO
+#: Which robot `pov_look` belongs to, so swinging the camera round one drone does not
+#: leave the next unit picked up staring off at nothing.
+var _pov_of := -1
 
 #: Drag offset from *behind the unit's heading*, not an absolute compass bearing -- so
 #: the camera keeps its shot as the robot turns instead of being left staring at a flank.
