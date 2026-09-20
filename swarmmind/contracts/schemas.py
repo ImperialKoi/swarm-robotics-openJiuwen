@@ -281,6 +281,12 @@ class VoiceCaption(_Msg):
     rejected: list[str] = []
     #: Round-trip for the spoken turn, end of speech to reply in hand.
     latency_ms: int = 0
+    #: Microphone loudness, roughly 0..1, for the dashboard's recording meter. Live
+    #: whenever the channel is armed, so the bars move before the key goes down.
+    level: float = 0.0
+    #: Whether the gate is actually open. Separate from `level` because a pause in a
+    #: sentence is still recording -- the dot must not flicker grey mid-word.
+    recording: bool = False
 
 
 # --- /swarm/events -----------------------------------------------------------------

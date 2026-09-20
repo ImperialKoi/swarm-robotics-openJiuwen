@@ -105,6 +105,11 @@ class Microphone:
         #: Set while the operator is mid-utterance. The console reads it to duck the
         #: assistant's own playback -- barge-in, without a key to press.
         self.hot = False
+        #: Loudness of the most recent block, roughly 0..1. Drives the dashboard's
+        #: recording meter, so it is updated in **both** modes and whether or not the
+        #: gate is open -- a meter that only moved while recording could not show the
+        #: operator that the microphone hears them before they press the key.
+        self.level = 0.0
         self.error: str | None = None
 
     # ------------------------------------------------------------------ lifecycle
@@ -144,6 +149,11 @@ class Microphone:
     def _on_audio(self, indata, frames, time_info, status) -> None:
         """PortAudio's thread. Appends only; never calls a model or touches the world."""
         block = np.asarray(indata, dtype=np.int16).reshape(-1).copy()
+        rms = float(np.sqrt(np.mean((block.astype(np.float32) / 32768.0) ** 2)))
+        # Perceptual rather than linear: speech sits around 0.02-0.15 RMS, which is a
+        # meter that never leaves the floor. A square root opens the bottom of the range
+        # where the signal actually lives.
+        self.level = float(min(1.0, (rms / 0.25) ** 0.5))
 
         if self.push_to_talk:
             with self._lock:
@@ -158,7 +168,6 @@ class Microphone:
                     self._finish(held)
             return
 
-        rms = float(np.sqrt(np.mean((block.astype(np.float32) / 32768.0) ** 2)))
         with self._lock:
             if self._floor is None:                       # still learning the room
                 self._ambient.append(rms)

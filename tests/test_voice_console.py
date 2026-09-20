@@ -129,6 +129,34 @@ def test_a_mission_with_no_voice_is_untouched(mission):
     assert mission.world.t > 0
 
 
+def test_a_dead_microphone_tells_the_dashboard_instead_of_going_silent(mission):
+    """The operator must be able to tell "mic off" from "nobody has spoken yet"."""
+    class DeadMic(FakeMic):
+        error = "PortAudioError: no input device"
+
+        def start(self):
+            return False
+
+    seen = []
+    mission.bus.subscribe("/operator/voice", seen.append)
+    c = OperatorConsole(mission.world, FakeOmni(OperatorTurn("", "")),
+                        mic=DeadMic(), speaker=FakeSpeaker())
+    assert not c.start(), "a dead microphone reported success"
+    assert c.phase == MUTED
+
+    c.step(mission.world, mission.executor, mission.tracker, mission.events,
+           mission.hivemind, bus=mission.bus)
+    assert seen, "a muted console published nothing; the dashboard cannot draw MIC OFF"
+    assert seen[-1]["phase"] == MUTED
+    assert "no input device" in seen[-1]["reply"], "the reason never reached the operator"
+
+    # The fault persists rather than scrolling away like a caption.
+    mission.world.t += 60.0
+    c.step(mission.world, mission.executor, mission.tracker, mission.events,
+           mission.hivemind, bus=mission.bus)
+    assert c._reply, "the muted reason was cleared by the caption timer"
+
+
 def test_a_muted_console_does_nothing_at_all(mission):
     c = OperatorConsole(mission.world, FakeOmni(OperatorTurn("", "")),
                         mic=FakeMic(), speaker=FakeSpeaker())
@@ -479,3 +507,36 @@ def test_native_voice_key_and_captions(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "VOICE_CHECK_OK" in result.stdout, result.stdout + result.stderr
     assert "SCRIPT ERROR" not in result.stderr, result.stderr
+
+
+def test_a_dashboard_that_connects_late_is_told_the_channel_exists(mission):
+    """The bug that hid the meter for a whole mission.
+
+    The console publishes on change and its first frame lands on tick one, before Godot
+    has connected. The bridge dropped it for having no client, nothing changed after
+    that (an armed channel in a quiet room is a constant), so it never published again
+    and the dashboard never learned the voice channel was there at all.
+    """
+    from swarmmind.bus.ws_server import WebSocketServer
+    from swarmmind.nodes.bridge import BridgeNode
+
+    server = WebSocketServer(port=8796)
+    bridge = BridgeNode(mission.world, server, mission.bus)
+
+    sent = []
+    server.send_to = lambda client, msg: sent.append(msg)
+    assert server.client_count == 0, "this test is about the no-client case"
+
+    # Published while nobody is connected -- exactly what happens on tick one.
+    mission.bus.publish("/operator/voice", {
+        "t": 0.0, "phase": "idle", "said": "", "reply": "", "sectors": [],
+        "rejected": [], "latency_ms": 0, "level": 0.0, "recording": False})
+    assert bridge._last_voice is not None, "the frame was dropped instead of cached"
+
+    bridge._greet(object())
+    voice = [m for m in sent if m.get("t") == "voice"]
+    assert voice, "a late dashboard was never told the voice channel exists"
+    assert voice[0]["phase"] == "idle"
+    assert "level" in voice[0] and "recording" in voice[0], "the meter has no data"
+    # ...and it arrives before the dashboard starts assembling the world.
+    assert sent.index(voice[0]) < [m.get("t") for m in sent].index("hello_done")

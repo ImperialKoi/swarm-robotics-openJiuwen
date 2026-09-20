@@ -84,8 +84,11 @@ class OperatorConsole:
     # ------------------------------------------------------------------ lifecycle
 
     def start(self) -> bool:
+        """Open the microphone. False is not fatal -- the mission runs regardless."""
         if not self.mic.start():
             self._phase = MUTED
+            #: Why the channel is dead, shown on the dashboard rather than only logged.
+            self._reply = self.mic.error or "no microphone available"
             return False
         self._phase = IDLE
         return True
@@ -122,6 +125,11 @@ class OperatorConsole:
         """Non-blocking. Call once per tick from the mission."""
         emit = emit or (lambda *a, **k: None)
         if self._phase == MUTED:
+            # **Still publishes.** A console whose microphone never opened used to
+            # return here before `_publish`, so the dashboard was told nothing at all
+            # and drew no badge -- indistinguishable from a healthy channel nobody has
+            # spoken into yet. The operator needs to see MIC OFF, not an absence.
+            self._publish(world, bus)
             return
 
         # A press that stops being renewed is a release: a dashboard that crashed or a
@@ -256,11 +264,22 @@ class OperatorConsole:
     def _publish(self, world, bus) -> None:
         if bus is None:
             return
-        if world.t > self._caption_until:
+        # A muted channel keeps its reason on screen: it is a standing fault, not a
+        # caption that should scroll away after twelve seconds.
+        if self._phase != MUTED and world.t > self._caption_until:
             self._said = self._reply = ""
             self._sectors, self._rejected = [], []
+            # The round-trip belongs to the turn that is on screen. Left standing it
+            # sat on every idle frame afterwards, so the dashboard reported the latency
+            # of an exchange whose captions had already scrolled away.
+            self._latency_ms = 0
+        # The meter needs a moving number, so the level is quantised into 20 steps and
+        # made part of the change key: while the operator is talking this republishes as
+        # the level moves, and the rest of the mission it stays as quiet as before.
+        level = round(float(getattr(self.mic, "level", 0.0)), 2)
         frame = (self._phase, self._said, self._reply,
-                 tuple(self._sectors), tuple(self._rejected))
+                 tuple(self._sectors), tuple(self._rejected),
+                 int(level * 20) if self._phase in (IDLE, LISTENING) else 0)
         if frame == self._published:
             return                                    # only on change; this is not a 10 Hz feed
         self._published = frame
@@ -268,4 +287,5 @@ class OperatorConsole:
             "t": round(world.t, 2), "phase": self._phase, "said": self._said,
             "reply": self._reply, "sectors": self._sectors,
             "rejected": self._rejected, "latency_ms": self._latency_ms,
+            "level": level, "recording": self._phase == LISTENING,
         })

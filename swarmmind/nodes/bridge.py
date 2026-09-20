@@ -93,6 +93,16 @@ class BridgeNode:
         self.on_mic = None
         #: What the dashboard's badge reads: True while the simulator believes U is down.
         self.mic_held = False
+        #: The last voice frame, replayed to a dashboard that connects later.
+        #:
+        #: **Without this the meter never appeared at all.** The console publishes on
+        #: change, and its first frame lands on tick one -- before Godot has connected,
+        #: so it was dropped for having no client. Nothing then changed (an armed
+        #: channel in a quiet room is a constant), so it never published again and the
+        #: dashboard spent the whole mission never learning the voice channel existed.
+        #: The sector codes solve the same late-join problem by resending every frame;
+        #: this is one message, so caching the last one is cheaper.
+        self._last_voice: dict | None = None
         server.on_connect = self._greet
         if bus is not None:
             bus.subscribe(topics.SWARM_EVENTS, self._on_event)
@@ -151,6 +161,11 @@ class BridgeNode:
         self._send_blob(client, "water", self._waterfield(w))
         self._send_blob(client, "occ",
                         base64.b64encode(w.occ.astype(np.uint8).tobytes()).decode())
+        # The voice channel's current state, if there is one. A dashboard that
+        # connected after the console's first publish would otherwise never be told the
+        # channel exists, and would draw no microphone meter for the whole mission.
+        if self._last_voice is not None:
+            self.server.send_to(client, self._last_voice)
         self.server.send_to(client, {"t": "hello_done"})
 
     def _height_scale(self, world) -> float:
@@ -370,14 +385,23 @@ class BridgeNode:
         by the process that generated it, so a 24 kHz stream never competes with the
         state frames for Godot's 64 KB inbound buffer.
         """
-        if self.server.client_count == 0:
-            return
-        self.server.broadcast({
+        frame = {
             "t": "voice", "phase": msg.get("phase", "idle"),
             "said": msg.get("said", ""), "reply": msg.get("reply", ""),
             "sectors": msg.get("sectors", []), "rejected": msg.get("rejected", []),
             "latency_ms": int(msg.get("latency_ms", 0)), "time": msg.get("t", 0.0),
-        })
+            # The recording meter: `level` is roughly 0..1 loudness, `recording` is
+            # whether the gate is actually open. Two fields rather than one because a
+            # silent operator mid-utterance is still recording, and the dot must stay
+            # red through the pauses in a sentence.
+            "level": float(msg.get("level", 0.0)), "recording": bool(msg.get("recording")),
+        }
+        # Cached before the client check, so a frame published while nobody was
+        # connected is still the one a late dashboard is greeted with.
+        self._last_voice = frame
+        if self.server.client_count == 0:
+            return
+        self.server.broadcast(frame)
 
     def _on_event(self, ev: dict) -> None:
         if self.server.client_count == 0:

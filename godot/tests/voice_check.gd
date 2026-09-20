@@ -61,14 +61,61 @@ func run() -> void:
 	dashboard._unhandled_input(u)
 	assert(dashboard.view_mode == before, "U also changed the view")
 
+	# ---------------------------------------------------------- the product name
+	# Neither bundled face has 蚁 or 群 (both Latin, `has_char` false), so without the
+	# SystemFont fallback in hud.gd `_font` the title draws as two tofu boxes. Assert
+	# the composed font resolves them rather than trusting the fallback list.
+	var title_font := dashboard.ui._font(SwarmHud.DISP_BOLD, 0)
+	assert(title_font.has_char("蚁".unicode_at(0)), "蚁 has no glyph: the title is tofu")
+	assert(title_font.has_char("群".unicode_at(0)), "群 has no glyph: the title is tofu")
+	var mono := dashboard.ui._font(SwarmHud.MONO, 0)
+	assert(mono.has_char("蚁".unicode_at(0)), "蚁 has no glyph in the voice badge face")
+	assert(SwarmHud.PHASE_LABEL["speaking"].contains("蚁群"),
+		"the voice badge still says SWARMMIND")
+
 	# ---------------------------------------------------------------- captions
 	var ui := dashboard.ui
 	assert(ui._cap_root != null, "the caption card was never built")
 	assert(not ui._cap_root.visible, "the caption card is up before anybody spoke")
 
-	# Idle with nothing said stays hidden: the hint must not sit over the map all run.
+	# The card stays up once the channel has spoken: it is the operator's only signal
+	# that the microphone is alive, and an absent card cannot say "the mic is off".
 	ui.on_voice({"phase": "idle", "said": "", "reply": "", "sectors": [], "rejected": []})
-	assert(not ui._cap_root.visible)
+	assert(ui._cap_root.visible, "the mic signal vanished when idle")
+	assert(not ui._cap_card.visible, "an empty subtitle plate sat over the map")
+	assert(not ui._cap_said.visible and not ui._cap_reply.visible,
+		"empty captions drew a line")
+
+	# --- the recording meter --------------------------------------------------------
+	# Grey and near-flat when the key is up, whatever the room is doing.
+	ui.on_voice({"phase": "idle", "said": "", "reply": "", "sectors": [], "rejected": [],
+		"recording": false, "level": 0.9})
+	assert(not ui._mic_recording, "the meter claimed to be recording with the key up")
+	assert(ui._mic_bars[ui._mic_bars.size() - 1] <= 0.121,
+		"room noise drove the meter while the key was up")
+
+	# Red and following the operator's own level while it is held.
+	for lv in [0.2, 0.7, 0.35, 0.9]:
+		ui.on_voice({"phase": "listening", "said": "", "reply": "", "sectors": [],
+			"rejected": [], "recording": true, "level": lv})
+	assert(ui._mic_recording, "the meter did not go live while recording")
+	# `is_equal_approx`, not `==`: _mic_bars is a PackedFloat32Array, and 0.9 stored as
+	# float32 is 0.899999976 against GDScript's float64 literal.
+	var bars := ui._mic_bars
+	assert(is_equal_approx(bars[bars.size() - 1], 0.9),
+		"the meter is not tracking the microphone level")
+	assert(is_equal_approx(bars[bars.size() - 3], 0.7), "the meter history is out of order")
+	assert(not is_equal_approx(bars[bars.size() - 1], bars[bars.size() - 2]),
+		"the meter is not fluctuating")
+	assert(bars.size() <= SwarmHud.METER_BARS, "the level history grew without bound")
+	assert(SwarmHud.MIC_LIVE.r > SwarmHud.MIC_IDLE.r, "recording is not the redder state")
+
+	# A dead microphone says so, in the warning colour, with its reason.
+	ui.on_voice({"phase": "muted", "said": "", "reply": "no microphone available",
+		"sectors": [], "rejected": []})
+	assert(ui._cap_root.visible and ui._cap_card.visible)
+	assert(not ui._mic_recording, "a dead microphone showed as recording")
+	assert(ui._cap_reply.visible and ui._cap_reply.text == "no microphone available")
 
 	# Holding U shows the badge before any text exists -- the operator needs to see
 	# that the channel heard them open their mouth.
@@ -81,7 +128,7 @@ func run() -> void:
 	ui.on_voice({"phase": "speaking", "said": "Pull everyone out of D4.",
 		"reply": "Clearing D4 now.", "sectors": ["D4", "E4"], "rejected": [],
 		"latency_ms": 1870})
-	assert(ui._cap_root.visible)
+	assert(ui._cap_root.visible and ui._cap_card.visible)
 	assert(ui._cap_said.visible and "Pull everyone out of D4." in ui._cap_said.text)
 	assert(ui._cap_reply.visible and ui._cap_reply.text == "Clearing D4 now.")
 	assert(ui._cap_tags.visible and "D4" in ui._cap_tags.text and "E4" in ui._cap_tags.text)
@@ -105,13 +152,23 @@ func run() -> void:
 			"sectors": [], "rejected": []})
 		assert(ui._cap_phase.text == SwarmHud.PHASE_LABEL[phase])
 
-	# The caption clears when the simulator says the turn has aged out.
+	# The caption text clears when the turn ages out; the badge itself stays.
 	ui.on_voice({"phase": "idle", "said": "", "reply": "", "sectors": [], "rejected": []})
-	assert(not ui._cap_root.visible, "the caption never cleared")
+	assert(not ui._cap_said.visible and not ui._cap_reply.visible, "captions never cleared")
+	assert(not ui._cap_card.visible, "the black plate outlived its text")
+	assert(ui._cap_root.visible, "the mic signal cleared with the captions")
 
-	# The card must not eat a click meant for a robot behind it.
+	# Nothing in the block may eat a click meant for a robot behind it.
 	assert(ui._cap_root.mouse_filter == Control.MOUSE_FILTER_IGNORE)
 	assert(ui._cap_card.mouse_filter == Control.MOUSE_FILTER_IGNORE)
+	assert(ui._cap_meter.mouse_filter == Control.MOUSE_FILTER_IGNORE)
+
+	# Subtitles, not a HUD panel: white text on a near-solid black plate.
+	assert(ui._cap_said.get_theme_color("font_color") == Color.WHITE,
+		"the operator's words are not white")
+	var plate := ui._cap_card.get_theme_stylebox("panel") as StyleBoxFlat
+	assert(plate.bg_color.a > 0.6 and plate.bg_color.r < 0.1,
+		"the subtitle plate is not black")
 
 	# A frame from an older simulator, with fields missing, must not crash the dashboard.
 	ui.on_voice({"phase": "speaking"})

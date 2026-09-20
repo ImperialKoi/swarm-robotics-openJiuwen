@@ -59,7 +59,7 @@ const C_WARN := Color(1.0, 0.75, 0.24)
 const PHASE_LABEL := {
 	"listening": "\u25cf LISTENING",
 	"thinking": "\u25cf WORKING",
-	"speaking": "\u25cf SWARMMIND",
+	"speaking": "\u25cf \u8681\u7fa4 YIQUN",
 	"idle": "\u25cb HOLD U TO TALK",
 	"muted": "\u25cb MIC OFF",
 }
@@ -68,7 +68,7 @@ const PHASE_COLOUR := {
 	"thinking": C_ACCENT,
 	"speaking": C_ACCENT,
 	"idle": C_DIM,
-	"muted": C_FAINT,
+	"muted": C_WARN,
 }
 
 #: Panel refresh rate. State frames land at 10 Hz, so faster buys nothing but text
@@ -101,7 +101,8 @@ const BINDINGS := [
 	["Esc", "release camera"],
 	["WASD", "drive unit (POV / chase)"],
 	["Space", "act: what the badge offers"],
-	["arrows", "drive · aim camera on a drone"],
+	["U", "HOLD to talk to the swarm"],
+	["arrows", "drive · turn a drone, tilt its cam"],
 	["wheel", "zoom"],
 	["drag", "orbit / swing chase"],
 	["R-drag", "pan / reframe"],
@@ -183,6 +184,7 @@ var _u := 16.0
 var _t := 0.0
 var _refresh_acc := 0.0
 var _fonts := {}
+var _cjk_font: SystemFont = null
 
 var _view_hole: Control
 var _view_draw: HudCanvas
@@ -237,6 +239,11 @@ var _cap_meta: Label
 var _cap_said: Label
 var _cap_reply: Label
 var _cap_tags: Label
+var _cap_meter: HudCanvas
+#: Whether the simulator says the gate is open. Drives the meter's colour.
+var _mic_recording := false
+#: Rolling level history, newest last. One entry per METER_BARS.
+var _mic_bars: PackedFloat32Array = PackedFloat32Array()
 var _t3_rows: Array = []
 
 # --- tallies, rebuilt from each state frame ------------------------------------------
@@ -313,17 +320,23 @@ func build(dashboard: SwarmDashboard) -> void:
 
 
 func _build_captions(hole: Control) -> void:
-	"""Two lines under the map: what the operator said, and what the swarm answered.
+	"""Subtitles at the foot of the map, plus the recording meter.
 
-	Anchored to the bottom of the 3D viewport hole and IGNORE all the way down, so it
-	never eats a click meant for a robot. Hidden until there is something to read.
+	**Subtitles, not a HUD panel.** White on near-solid black, centred under the map and
+	sized like film captions, because that is the one convention every viewer already
+	reads without being taught. The rails around the map use the project's dim palette;
+	these deliberately do not -- a caption that matched the panels would be read as one
+	more readout instead of as speech.
+
+	Child of the 3D viewport hole and IGNORE all the way down, so it never eats a click
+	meant for a robot behind it.
 	"""
 	_cap_root = Control.new()
 	_cap_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hole.add_child(_cap_root)
 	_cap_root.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	_cap_root.offset_top = -_px(13.0)
-	_cap_root.offset_bottom = -_px(1.2)
+	_cap_root.offset_top = -_px(14.0)
+	_cap_root.offset_bottom = -_px(1.6)
 
 	var centre := _hbox(_cap_root, 0.0)
 	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -331,27 +344,95 @@ func _build_captions(hole: Control) -> void:
 	centre.alignment = BoxContainer.ALIGNMENT_CENTER
 	_spring(centre)
 
+	var stack := _vbox(centre, _px(0.45))
+	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.size_flags_vertical = Control.SIZE_SHRINK_END
+	stack.alignment = BoxContainer.ALIGNMENT_END
+	_spring(centre)
+
+	# --- the recording meter, above the subtitles and centred on them --------------
+	var meter_row := _hbox(stack, 0.0)
+	meter_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	meter_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_cap_meter = HudCanvas.new()
+	_cap_meter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cap_meter.paint = _draw_meter
+	_cap_meter.custom_minimum_size = Vector2(_px(15.0), _px(2.0))
+	meter_row.add_child(_cap_meter)
+
+	# --- the subtitles --------------------------------------------------------------
 	_cap_card = PanelContainer.new()
 	_cap_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cap_card.size_flags_vertical = Control.SIZE_SHRINK_END
 	_cap_card.add_theme_stylebox_override("panel",
-		_style(Color(C_BG.r, C_BG.g, C_BG.b, 0.82), _px(1.1), _px(0.7), C_LINE, 4))
-	_cap_card.custom_minimum_size.x = _px(52.0)
-	centre.add_child(_cap_card)
-	_spring(centre)
+		_style(Color(0, 0, 0, 0.78), _px(1.2), _px(0.55), Color(0, 0, 0, 0), 2))
+	_cap_card.custom_minimum_size.x = _px(40.0)
+	stack.add_child(_cap_card)
 
-	var col := _vbox(_cap_card, _px(0.28))
-	var head := _hbox(col, _px(0.5))
-	_cap_phase = _text(head, "", 0.50, C_ACCENT, MONO, 0.22)
-	_spring(head)
-	_cap_meta = _text(head, "", 0.44, C_FAINT, MONO, 0.14)
-	_hline(col, C_LINE_SOFT)
-	_cap_said = _text(col, "", 0.62, C_BRIGHT, DISP, 0.0)
+	var col := _vbox(_cap_card, _px(0.2))
+	# What the operator said: plain white, the loudest thing in the block.
+	_cap_said = _text(col, "", 0.70, Color.WHITE, DISP, 0.0)
 	_cap_said.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_cap_reply = _text(col, "", 0.58, C_ACCENT, MONO, 0.0)
+	_cap_said.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# The reply: the same white a shade down, so the two are one conversation rather
+	# than a readout answering a readout.
+	_cap_reply = _text(col, "", 0.64, Color(0.88, 0.90, 0.90), DISP, 0.0)
 	_cap_reply.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_cap_tags = _text(col, "", 0.46, C_DIM, MONO, 0.16)
+	_cap_reply.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# Sectors moved / refused, and the round-trip. Small, under the speech.
+	var foot := _hbox(col, _px(0.6))
+	foot.alignment = BoxContainer.ALIGNMENT_CENTER
+	_cap_tags = _text(foot, "", 0.44, Color(0.72, 0.74, 0.74), MONO, 0.16)
+	_cap_meta = _text(foot, "", 0.42, Color(0.55, 0.57, 0.57), MONO, 0.14)
+	# Kept for the phase label, which the meter draws rather than a row of its own.
+	_cap_phase = _text(col, "", 0.01, Color(0, 0, 0, 0), MONO, 0.0)
+	_cap_phase.visible = false
 	_cap_root.visible = false
+
+
+#: Bars in the recording meter. Odd, so one sits dead centre under the dot.
+const METER_BARS := 13
+#: Red while the gate is open. Grey while armed and listening to the room.
+const MIC_LIVE := Color(0.95, 0.24, 0.24)
+const MIC_IDLE := Color(0.45, 0.48, 0.48)
+
+
+func _draw_meter(c: Control) -> void:
+	"""A record dot and a level bar, drawn from the simulator's own microphone level.
+
+	**Not an animation.** The heights come from `level` on the voice frame, which is the
+	RMS of the block PortAudio last handed the simulator, so the bars move because the
+	operator is talking. A decorative wobble would say "recording" just as loudly when
+	the microphone was dead, which is the one thing this has to be able to tell apart.
+
+	Grey and flat when the key is up; red and moving while it is held.
+	"""
+	var w := c.size.x
+	var h := c.size.y
+	var ink := MIC_LIVE if _mic_recording else MIC_IDLE
+
+	# The dot. Solid while recording, hollow while merely armed.
+	var r := h * 0.22
+	var dot := Vector2(w * 0.5 - _px(7.4), h * 0.5)
+	if _mic_recording:
+		c.draw_circle(dot, r, ink)
+	else:
+		c.draw_arc(dot, r, 0.0, TAU, 20, ink, maxf(1.0, _px(0.12)))
+
+	# The bars. `_mic_bars` is a short history so the trace moves across rather than
+	# every bar pulsing together, which reads as a level meter instead of a strobe.
+	var bw := _px(0.42)
+	var gap := _px(0.34)
+	var x0 := dot.x + _px(1.6)
+	var mid := h * 0.5
+	for i in METER_BARS:
+		var v: float = _mic_bars[i] if i < _mic_bars.size() else 0.0
+		# A floor so the meter is a visible line at silence rather than nothing at all.
+		var bh: float = maxf(h * 0.10, v * h * 0.92)
+		var x := x0 + i * (bw + gap)
+		if x + bw > w:
+			break
+		c.draw_rect(Rect2(x, mid - bh * 0.5, bw, bh), ink)
 
 
 func on_voice(msg: Dictionary) -> void:
@@ -364,25 +445,38 @@ func on_voice(msg: Dictionary) -> void:
 	var sectors: Array = msg.get("sectors", [])
 	var refused: Array = msg.get("rejected", [])
 
-	# The badge is live even with no text yet -- that is the whole point of showing
-	# LISTENING: the operator can see the channel heard them open their mouth.
-	var live := phase == "listening" or phase == "thinking" or phase == "speaking"
-	# Idle shows the card only while a caption is still up. The "HOLD U TO TALK" badge
-	# would otherwise sit over the map for the whole mission, which is a hint the
-	# operator needs once and a judge reads as clutter.
-	_cap_root.visible = live or said != "" or reply != ""
-	if not _cap_root.visible:
-		return
+	# **The meter is permanent once the channel reports in**, because it is the
+	# operator's only signal that the microphone is alive -- a meter that appeared only
+	# mid-turn left "the mic is dead" and "nobody has spoken yet" looking identical. A
+	# run without `--voice` sends no `voice` frame at all, so nothing is ever drawn.
+	_cap_root.visible = true
 
 	_cap_phase.text = PHASE_LABEL.get(phase, "")
 	_cap_phase.add_theme_color_override("font_color", PHASE_COLOUR.get(phase, C_DIM))
+
+	# --- the recording meter -------------------------------------------------------
+	_mic_recording = bool(msg.get("recording", false))
+	var lvl := clampf(float(msg.get("level", 0.0)), 0.0, 1.0)
+	# Grey bars sit near the floor whatever the room is doing: the meter's job when the
+	# key is up is to say "armed", not to draw the ambient noise of a demo hall.
+	_mic_bars.append(lvl if _mic_recording else minf(lvl, 0.12))
+	while _mic_bars.size() > METER_BARS:
+		_mic_bars.remove_at(0)
+	if _cap_meter != null:
+		_cap_meter.queue_redraw()
+
 	var ms := int(msg.get("latency_ms", 0))
 	_cap_meta.text = ("%d ms" % ms) if ms > 0 else ""
 
+	# The badge alone is the idle state; the two caption lines appear as they fill.
 	_cap_said.text = ("\u201c%s\u201d" % said) if said != "" else ""
 	_cap_said.visible = said != ""
 	_cap_reply.text = reply
 	_cap_reply.visible = reply != ""
+	# The black subtitle plate only exists when there is something to read. The meter
+	# above it stays whatever happens, so an idle channel is a bare meter over the map
+	# rather than an empty box.
+	_cap_card.visible = said != "" or reply != ""
 
 	var tags := ""
 	if not sectors.is_empty():
@@ -405,7 +499,7 @@ func _build_top(root: Control) -> void:
 	var title := _vbox(row, _px(0.18))
 	title.alignment = BoxContainer.ALIGNMENT_CENTER
 	title.custom_minimum_size.x = _px(11.5)
-	_text(title, "SWARMMIND // SAR", 0.95, C_TITLE, DISP_BOLD, 0.16)
+	_text(title, "\u8681\u7fa4 YIQUN // SAR", 0.95, C_TITLE, DISP_BOLD, 0.16)
 	_title_sub = _text(title, "NO SIMULATOR", 0.5, C_DIM, MONO, 0.2)
 	_vsep(row, _px(0.9), C_LINE_SOFT)
 
@@ -1438,6 +1532,25 @@ func _fs(cqw: float) -> int:
 	return maxi(FONT_MIN_PX, roundi(cqw * _u * FONT_BOOST))
 
 
+func _cjk() -> SystemFont:
+	"""The fallback that draws 蚁群.
+
+	Neither bundled face has the glyphs -- IBM Plex Mono and Oxanium are Latin, 132 KB
+	and 43 KB, and `has_char()` is false for both characters, so the name renders as two
+	tofu boxes without this. Bundling a CJK face instead would add several megabytes for
+	two glyphs, so the OS supplies them and the Latin design still ships in-project.
+
+	Named families first, `Sans-Serif` last: the generic always resolves to something,
+	so the title can never be empty even where none of the named faces exist.
+	"""
+	if _cjk_font == null:
+		_cjk_font = SystemFont.new()
+		_cjk_font.font_names = PackedStringArray([
+			"PingFang SC", "Hiragino Sans GB", "Heiti SC",
+			"Noto Sans CJK SC", "Microsoft YaHei", "Sans-Serif"])
+	return _cjk_font
+
+
 func _font(face: int, track_px: int) -> Font:
 	"""One FontVariation per face and tracking, cached.
 
@@ -1461,6 +1574,9 @@ func _font(face: int, track_px: int) -> Font:
 		fv.variation_opentype = {wght: 700 if face == DISP_BOLD else 600}
 	fv.base_font = base
 	fv.spacing_glyph = track_px
+	# Every face gets it: the product name appears in the title and in the voice badge,
+	# which are different faces, and a glyph the base lacks falls through to this.
+	fv.fallbacks = [_cjk()]
 	_fonts[key] = fv
 	return fv
 
