@@ -32,8 +32,8 @@ environment; nothing here should touch your system Python.
 ## 1. Clone
 
 ```bash
-git clone https://github.com/ImperialKoi/swarm-robotics-openJiawen.git
-cd swarm-robotics-openJiawen
+git clone https://github.com/ImperialKoi/swarm-robotics-openJiuwen.git
+cd swarm-robotics-openJiuwen
 ```
 
 ## 2. Install dependencies
