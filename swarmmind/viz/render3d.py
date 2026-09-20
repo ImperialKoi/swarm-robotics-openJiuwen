@@ -175,6 +175,21 @@ class Renderer3D:
                                       world.scn.terrain.reference)
         self._tiles = {}
         self._active_strides = {}
+        #: The ground continuing past the map border. Static, so built once.
+        self._apron = None
+
+    def _draw_apron(self, img, zbuf, cam, fog):
+        """Draw the valley the map is a crop of, so the terrain does not float.
+
+        No fog-of-war and no sector wash: both textures describe the map, and the
+        apron is outside it. The shader's distance fog is the only treatment, which
+        is what dissolves the far edge into the sky.
+        """
+        if self._apron is None:
+            self._apron = self.surface.apron_arrays()
+        apron = self._apron
+        raster_triangles(img, zbuf, cam, apron.vertices, apron.triangles,
+                         apron.colors[:, :3]*255, atmosphere=fog, shaded=False)
 
     # ------------------------------------------------------------------ geometry
 
@@ -378,6 +393,7 @@ class Renderer3D:
         zbuf = np.full((self.h, self.w), np.inf, dtype=np.float32)
 
         self._ground_fill(img, zbuf, cam)
+        self._draw_apron(img, zbuf, cam, fog)
         self._draw_terrain(img, zbuf, world, cam, fog, sectors)
 
         if victims and thermal_unit is None:  # explicit ground-truth view (V/G)

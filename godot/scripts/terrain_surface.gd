@@ -17,6 +17,13 @@ const FLIGHT_SLOPE := 0.5
 const FLIGHT_FOOTPRINT := 2.5
 const FLIGHT_MAX_STRIDE := 8
 
+# How far the display ground continues past the map border, and how finely it is
+# stepped. Y-up port of the Python constants of the same names.
+const APRON_WIDTH_M := 140.0
+const APRON_RINGS := 16
+const APRON_FLOOR_DROP := 7.0
+const APRON_HAZE := Color(0.694, 0.725, 0.698)
+
 var gw := 0
 var gh := 0
 var cell := 1.0
@@ -497,6 +504,96 @@ func build_water_mesh(x0: int, y0: int, x1: int, y1: int) -> ArrayMesh:
 				flow_uv.append(water_frame[i])
 			indices.append_array([first, first + 2, first + 1, first + 1, first + 2, first + 3])
 	return _make_mesh(vertices, mesh_colors, mesh_normals, uv, indices, flow_uv)
+
+
+func build_apron_mesh(width_m: float = APRON_WIDTH_M, rings: int = APRON_RINGS) -> ArrayMesh:
+	# Y-up port of TerrainSurface.apron_arrays: the valley the map is a crop of.
+	# Display-only geometry; simulation, grounding and the parity lattice are untouched.
+	var coords: Array[Vector2i] = []
+	for x in range(gw + 1):
+		coords.append(Vector2i(x, 0))
+	for y in range(1, gh + 1):
+		coords.append(Vector2i(gw, y))
+	for x in range(gw - 1, -1, -1):
+		coords.append(Vector2i(x, gh))
+	for y in range(gh - 1, 0, -1):
+		coords.append(Vector2i(0, y))
+	var n := coords.size()
+	var base := PackedVector3Array()
+	var base_colors := PackedColorArray()
+	var base_normals := PackedVector3Array()
+	var out_dir := PackedVector2Array()
+	for c in coords:
+		var i := c.y * (gw + 1) + c.x
+		base.append(Vector3(c.x * cell, corners[i], c.y * cell))
+		base_colors.append(colors[i])
+		base_normals.append(normals[i])
+		var d := Vector2(0, 0)
+		if c.y == 0:
+			d = Vector2(0, -1)
+		if c.x == gw:
+			d = Vector2(1, 0)
+		if c.y == gh:
+			d = Vector2(0, 1)
+		if c.x == 0:
+			d = Vector2(-1, 0)
+		if (c.x == 0 or c.x == gw) and (c.y == 0 or c.y == gh):
+			d = Vector2(-1.0 if c.x == 0 else 1.0, -1.0 if c.y == 0 else 1.0)
+		out_dir.append(d.normalized())
+	# Smooth the border colours along the loop before they are stretched outward.
+	for _pass in range(4):
+		var src := base_colors
+		var smoothed := PackedColorArray()
+		smoothed.resize(n)
+		for k in range(n):
+			var a: Color = src[(k - 1 + n) % n]
+			var b: Color = src[k]
+			var c2: Color = src[(k + 1) % n]
+			smoothed[k] = Color(a.r + 2.0 * b.r + c2.r, a.g + 2.0 * b.g + c2.g,
+				a.b + 2.0 * b.b + c2.b, 1.0) * 0.25
+		base_colors = smoothed
+
+	var floor_z := minimum - APRON_FLOOR_DROP
+	var hdecay := width_m * 0.50
+	var cdecay := width_m * 0.16
+	var vertices := PackedVector3Array()
+	var vcols := PackedColorArray()
+	var vnorms := PackedVector3Array()
+	for k in range(n):
+		vertices.append(base[k])
+		vcols.append(base_colors[k])
+		vnorms.append(base_normals[k])
+	for r in range(1, rings + 1):
+		var d := width_m * float(r) / float(rings)
+		var ht := exp(-d / hdecay)
+		var ct := 1.0 - exp(-d / cdecay)
+		for k in range(n):
+			var b := base[k]
+			var pos := Vector3(b.x + out_dir[k].x * d, 0.0, b.z + out_dir[k].y * d)
+			pos.y = floor_z + (b.y - floor_z) * ht
+			var tone := 0.94 + 0.12 * _noise(pos.x + 61.0, pos.z + 23.0, 47.0)
+			var col := base_colors[k]
+			col = Color(
+				col.r * (1.0 - ct) + APRON_HAZE.r * tone * ct,
+				col.g * (1.0 - ct) + APRON_HAZE.g * tone * ct,
+				col.b * (1.0 - ct) + APRON_HAZE.b * tone * ct, 1.0)
+			vnorms.append((base_normals[k] * (1.0 - ct) + Vector3(0, 1, 0) * ct).normalized())
+			vertices.append(pos)
+			vcols.append(col)
+	var indices := PackedInt32Array()
+	for r in range(rings):
+		for k in range(n):
+			var k2 := (k + 1) % n
+			var a := r * n + k
+			var a2 := r * n + k2
+			var b2 := (r + 1) * n + k
+			var b3 := (r + 1) * n + k2
+			indices.append_array([a, a2, b2, a2, b3, b2])
+	# The apron is outside the map, so it carries no fog-of-war UVs; the array still
+	# has to match the vertex count or `add_surface_from_arrays` rejects the surface.
+	var uv := PackedVector2Array()
+	uv.resize(vertices.size())
+	return _make_mesh(vertices, vcols, vnorms, uv, indices)
 
 
 func _make_mesh(vertices: PackedVector3Array, mesh_colors: PackedColorArray,

@@ -19,6 +19,7 @@ from ..control.planner import UNREACHABLE
 from ..sim import grid
 from ..sim.robot import CHASSIS_INDEX, LANE_INDEX, OUT_OF_COMMS
 from ..sim.world import CARRIED, CLEARED, FOUND, HIDDEN, REACH_DIG, RESCUED
+from .tasks import in_known_hazard
 
 #: A sector this well explored stops attracting idle robots. Not 1.0: the last few
 #: percent of a sector are usually cells no chassis can stand in, so a swarm told to
@@ -277,6 +278,34 @@ class SkillExecutor:
             drift = _drift_targets(world, spare, self._dark_points(world),
                                    self._reach_labels(world))
 
+        # Casualty staging: an idle carrier or digger waits beside the casualty it can
+        # act on next, instead of walking at dark ground.
+        #
+        # The auction can only employ a robot when a task exists, and a casualty task
+        # exists only once the casualty reaches the stage that needs that lane -- so a
+        # carrier spends the dig walking at a frontier, and when the victim clears the
+        # response is a walk back across the map. Measured at t=180 on seed 42: 43 of
+        # 96 carriers and 96 of 117 diggers on search work while 20 cleared casualties
+        # waited, and the mean rescue took 92.7 s. Staging is unassigned movement, the
+        # same contract as drift and the relay orders: the robot stays free, bids on
+        # the real task the moment it is announced, and is already standing there.
+        stage: dict[int, tuple[tuple[float, float], str]] = {}
+        if len(idle):
+            spare_stage = np.array([i for i in idle if i not in roam and i not in charge
+                                    and i not in self.policy_goal], dtype=int)
+            stage = _casualty_staging(world, spare_stage, self._reach_labels(world))
+        # Last resort before standing still: any lane with nothing to do walks to a
+        # known casualty. At 99% explored the dark-ground targets run out long before
+        # the free robots do -- measured at t=180 on seed 42: 126 robots idle, 22
+        # cleared casualties waiting, and the two facts had nothing to do with each
+        # other. A scout cannot carry or dig, but it can be standing where the rescue
+        # is, which is both a pair of eyes and what an operator expects to see.
+        support: dict[int, tuple[tuple[float, float], str]] = {}
+        if len(idle):
+            spare_support = np.array([i for i in idle if i not in roam and i not in charge
+                                      and i not in self.policy_goal], dtype=int)
+            support = _support_staging(world, spare_support, self._reach_labels(world))
+
         for i, a in enumerate(self.assignment):
             if world.status[i] > OUT_OF_COMMS:
                 continue
@@ -320,6 +349,10 @@ class SkillExecutor:
                     # drift: it is unassigned movement, and the contract is frozen.
                     g, self.reason[i] = pg[0], pg[1]
                     self.activity[i] = ACTIVITY["drift"]
+                elif (stg := stage.get(i)) is not None:
+                    # No task yet, so wait where the next one will be.
+                    g, self.reason[i] = stg
+                    self.activity[i] = ACTIVITY["drift"]
                 elif (tgt := drift.get(i)) is not None:
                     # No task, so go where the map is still dark.
                     #
@@ -343,6 +376,10 @@ class SkillExecutor:
                     priority = world.sector_priority[world.sector_of_cell[ty, tx]]
                     self.reason[i] = (f"following priority search in {_sector(world, tgt)}"
                                       if priority == 0 else "no task, closing on unexplored ground")
+                    self.activity[i] = ACTIVITY["drift"]
+                elif (sup := support.get(i)) is not None:
+                    # Nothing left to search, but a casualty still wants eyes on it.
+                    g, self.reason[i] = sup
                     self.activity[i] = ACTIVITY["drift"]
                 else:
                     self.reason[i] = "no reachable search work; awaiting assignment"
@@ -1011,6 +1048,145 @@ def _drift_targets(world, spare: np.ndarray, dark: dict[int, np.ndarray],
                     if tgt is None:
                         continue
             out[int(spare[row])] = (float(tgt[0]), float(tgt[1]))
+    return out
+
+
+#: Idle robots staged per casualty, by the lane that can act on it. Carriers per
+#: cleared casualty matches `TaskGenerator.carriers_per_victim`; diggers match the
+#: simulation's `MAX_DIGGERS`, because a fourth scoop round the hole adds nothing.
+STAGE_CARRIERS_PER_VICTIM = 2
+STAGE_DIGGERS_PER_VICTIM = 3
+
+
+def _casualty_staging(world, spare: np.ndarray, reach: dict[int, np.ndarray] | None = None
+                      ) -> dict[int, tuple[tuple[float, float], str]]:
+    """Where an idle carrier or digger waits: beside the casualty it acts on next.
+
+    **Unassigned movement, exactly like drift.** The robot holds no task, so it stays
+    in every auction's free pool and bids on the real task the moment one is announced
+    -- it is simply already standing next to the work instead of a hundred metres away.
+    When it arrives, the simulation's own proximity rules take over: a gripper within
+    `REACH_GRAB` of a cleared casualty picks it up, and a scoop within `REACH_DIG` of a
+    buried one digs it, both without any assignment at all.
+
+    Posts are casualties that are *known* to the swarm (`FOUND`/`CLEARED`, which only
+    a resolved report sets) -- never the hidden list. Cleared casualties get carriers;
+    buried ones get diggers and, as a second rank, carriers pre-staged for the pickup
+    that follows. Per-post caps stop the whole lane piling onto one body, and the
+    assignment is nearest-first so a robot that is already close stays close.
+
+    Hazard and reachability are filtered the same way drift filters them: a robot
+    parked against a river bank or inside the fire is not staged, it is lost.
+    """
+    posts: list[tuple[np.ndarray, int, int, str]] = []
+    for v in world.victims:
+        if v.state == CLEARED:
+            posts.append((np.asarray(v.pos, dtype=float), LANE_INDEX["gripper"],
+                          STAGE_CARRIERS_PER_VICTIM, f"staging at {v.id} for pickup"))
+        elif v.state == FOUND and v.buried and v.debris_remaining > 0.0:
+            posts.append((np.asarray(v.pos, dtype=float), LANE_INDEX["scoop"],
+                          STAGE_DIGGERS_PER_VICTIM, f"staging at {v.id} to dig"))
+            posts.append((np.asarray(v.pos, dtype=float), LANE_INDEX["gripper"],
+                          STAGE_CARRIERS_PER_VICTIM, f"staging near {v.id} for pickup"))
+    if not posts or len(spare) == 0:
+        return {}
+
+    lanes = (LANE_INDEX["gripper"], LANE_INDEX["scoop"])
+    cand = spare[np.isin(world.actuator[spare], lanes)]
+    if len(cand) == 0:
+        return {}
+
+    want_lane = np.array([p[1] for p in posts])
+    pos_posts = np.stack([p[0] for p in posts])
+    caps = np.array([p[2] for p in posts])
+    d = np.linalg.norm(world.pos[cand][:, None, :] - pos_posts[None, :, :], axis=2)
+    d[:, np.array([in_known_hazard(world, p) for p in pos_posts])] = np.inf
+    d[world.actuator[cand][:, None] != want_lane[None, :]] = np.inf
+
+    if reach is not None:
+        rx, ry = grid.world_to_cell(world.pos[cand, 0], world.pos[cand, 1],
+                                    world.cell, world.shape)
+        px, py = grid.world_to_cell(pos_posts[:, 0], pos_posts[:, 1],
+                                    world.cell, world.shape)
+        for c, lab in reach.items():
+            rows = np.nonzero(world.chassis[cand] == c)[0]
+            if len(rows) == 0:
+                continue
+            same = ((lab[ry[rows], rx[rows]][:, None] == lab[py, px][None, :])
+                    & (lab[ry[rows], rx[rows]][:, None] >= 0))
+            d[rows] = np.where(same, d[rows], np.inf)
+
+    out: dict[int, tuple[tuple[float, float], str]] = {}
+    used = np.zeros(len(posts), dtype=int)
+    for f in np.argsort(d, axis=None):
+        row, col = divmod(int(f), d.shape[1])
+        if not np.isfinite(d[row, col]) or used[col] >= caps[col]:
+            continue
+        i = int(cand[row])
+        if i in out:
+            continue
+        used[col] += 1
+        out[i] = ((float(pos_posts[col, 0]), float(pos_posts[col, 1])), posts[col][3])
+    return out
+
+
+#: Robots of any lane posted per casualty when there is nothing else to do. Higher
+#: than the carrier/digger caps because these are not doing the work -- they are
+#: simply better placed than standing at base, and the crowd is bounded by the
+#: casualty count rather than by a fleet.
+SUPPORT_PER_VICTIM = 4
+
+
+def _support_staging(world, spare: np.ndarray, reach: dict[int, np.ndarray] | None = None
+                     ) -> dict[int, tuple[tuple[float, float], str]]:
+    """Last-resort posts for robots with no search work: stand by a casualty.
+
+    Deliberately the *last* branch before idle, not a competitor to drift: exploring
+    dark ground is worth more than standing near somebody who already has a carrier.
+    It only fires when the map has no reachable dark ground left to offer, which is
+    the endgame state -- measured at t=180 on seed 42, 126 robots idle while 22
+    cleared casualties waited for pickup, and the idle count was the larger of the
+    two. A scout cannot carry or dig; it can be the pair of eyes an operator would
+    expect to see at a rescue, and its camera is what finds the next casualty.
+    """
+    posts: list[tuple[np.ndarray, str]] = []
+    for v in world.victims:
+        if v.state == CLEARED:
+            posts.append((np.asarray(v.pos, dtype=float), f"supporting pickup of {v.id}"))
+        elif v.state == FOUND:
+            posts.append((np.asarray(v.pos, dtype=float), f"supporting dig at {v.id}"))
+        elif v.state == CARRIED:
+            posts.append((np.asarray(v.pos, dtype=float), f"escorting {v.id} home"))
+    if not posts or len(spare) == 0:
+        return {}
+    pos_posts = np.stack([p[0] for p in posts])
+    caps = np.full(len(posts), SUPPORT_PER_VICTIM, dtype=int)
+    d = np.linalg.norm(world.pos[spare][:, None, :] - pos_posts[None, :, :], axis=2)
+    d[:, np.array([in_known_hazard(world, p) for p in pos_posts])] = np.inf
+    if reach is not None:
+        rx, ry = grid.world_to_cell(world.pos[spare, 0], world.pos[spare, 1],
+                                    world.cell, world.shape)
+        px, py = grid.world_to_cell(pos_posts[:, 0], pos_posts[:, 1],
+                                    world.cell, world.shape)
+        for c, lab in reach.items():
+            rows = np.nonzero(world.chassis[spare] == c)[0]
+            if len(rows) == 0:
+                continue
+            same = ((lab[ry[rows], rx[rows]][:, None] == lab[py, px][None, :])
+                    & (lab[ry[rows], rx[rows]][:, None] >= 0))
+            d[rows] = np.where(same, d[rows], np.inf)
+
+    out: dict[int, tuple[tuple[float, float], str]] = {}
+    used = np.zeros(len(posts), dtype=int)
+    for f in np.argsort(d, axis=None):
+        row, col = divmod(int(f), d.shape[1])
+        if not np.isfinite(d[row, col]) or used[col] >= caps[col]:
+            continue
+        i = int(spare[row])
+        if i in out:
+            continue
+        used[col] += 1
+        out[i] = ((float(pos_posts[col, 0]), float(pos_posts[col, 1])), posts[col][1])
     return out
 
 

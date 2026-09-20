@@ -105,6 +105,18 @@ class HivemindNode:
             except Exception as exc:                            # noqa: BLE001
                 b["err"] = exc
 
+        if getattr(provider, "synchronous", False):
+            # An instant provider runs inline. See `ScriptedProvider.synchronous`: a
+            # worker thread here would let OS scheduling decide which tick the
+            # directive lands on, and invariant #6 covers Tier 3 as much as Tier 2.
+            # `_collect` picks the finished box up on the next `step`, so the node's
+            # start-then-collect shape is unchanged.
+            run()
+            self.stats["calls"] += 1
+            self._inflight = {"thread": None, "box": box, "rung": rung, "user": user,
+                              "started": time.perf_counter()}
+            return
+
         th = threading.Thread(target=run, daemon=True)
         th.start()
         self.stats["calls"] += 1
@@ -125,9 +137,12 @@ class HivemindNode:
         f = self._inflight
         elapsed = time.perf_counter() - f["started"]
         if "out" not in f["box"]:
-            if f["thread"].is_alive() and elapsed < self.timeout:
+            # `thread` is None for a synchronous provider that raised: its result is
+            # final, not pending, so it spends the rung immediately.
+            alive = f["thread"] is not None and f["thread"].is_alive()
+            if alive and elapsed < self.timeout:
                 return                                          # still thinking
-            self.stats["timed_out" if f["thread"].is_alive() else "errored"] += 1
+            self.stats["timed_out" if alive else "errored"] += 1
             self._start(f["user"], f["rung"] + 1, emit)
             return
 

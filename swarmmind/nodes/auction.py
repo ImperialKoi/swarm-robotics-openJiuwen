@@ -23,6 +23,7 @@ from ..contracts import topics
 from ..control.planner import UNREACHABLE
 from ..sim import grid
 from ..sim.robot import DESTROYED, LANE_INDEX, OUT_OF_COMMS
+from ..sim.world import CLEARED, FOUND
 from .skill_executor import Assignment, eligible
 from .tasks import (
     RANK,
@@ -124,6 +125,10 @@ class AuctionNode:
         self.last_hb = np.full(world.n, world.t, dtype=np.float64)
         self._seq = 0
         self._haz_field: np.ndarray | None = None
+        #: Whether a capable lane's own casualty work is waiting this cycle. Set in
+        #: `step`, read in `_best_bidder`. False until the first cycle.
+        self._hold_grippers = False
+        self._hold_scoops = False
         self.stats = {"announced": 0, "awarded": 0, "orphaned": 0, "no_bidder": 0}
 
     # ------------------------------------------------------------------ heartbeat
@@ -144,6 +149,29 @@ class AuctionNode:
         n_free = int(free.sum())
         cap = int(np.clip(self.ANNOUNCE_PER_FREE * n_free,
                           self.MIN_ANNOUNCED, self.MAX_ANNOUNCED))
+
+        # Casualty work owns the lanes that can do it.
+        #
+        # A carrier is allowed to explore when it has nothing else to do, which is
+        # right early. But a casualty task exists only once the casualty reaches the
+        # stage that needs that lane, so the walk from wherever the search took the
+        # robot is pure response latency, paid by the casualty. Measured at t=180 on
+        # seed 42: 43 of 96 carriers and 96 of 117 diggers were on search work while
+        # 20 cleared casualties waited for pickup, and the mean rescue took 92.7 s.
+        # The lane is held back from `explore` while its own work waits -- the idle
+        # ones are staged at the casualty by `SkillExecutor._casualty_staging`, and
+        # rescue-tier tasks are still open to them, so nothing idles by holding.
+        #
+        # Carriers are held from the moment a casualty is *found* under debris, not
+        # from the moment it is cleared: a dig takes seconds once a scoop is there, so
+        # releasing the carrier into a search task while the dig runs is how it ends up
+        # 80 m away exactly when the pickup becomes possible.
+        self._hold_grippers = any(
+            v.state == CLEARED
+            or (v.state == FOUND and v.buried and v.debris_remaining > 0.0)
+            for v in world.victims)
+        self._hold_scoops = any(v.state == FOUND and v.buried and v.debris_remaining > 0.0
+                                for v in world.victims)
 
         tasks = self.gen.generate(world, ex, tracker)
         announced = tasks[:cap]
@@ -204,6 +232,13 @@ class AuctionNode:
             grip = world.actuator == LANE_INDEX["gripper"]
             if int((elig & grip).sum()) <= self.carrier_reserve:
                 elig = elig & ~grip
+        # A capable lane with casualty work waiting does not go searching. Set per
+        # cycle in `step` -- see the note there for the measurement.
+        if task.kind == "explore":
+            if self._hold_grippers:
+                elig = elig & (world.actuator != LANE_INDEX["gripper"])
+            if self._hold_scoops:
+                elig = elig & (world.actuator != LANE_INDEX["scoop"])
         # Territory. Without this every scout bids on the globally-best frontier, so
         # 352 of them converge on the same ground and the swarm runs at ~4% search
         # efficiency (MEASUREMENTS.md M-35). Only search work is fenced -- a casualty

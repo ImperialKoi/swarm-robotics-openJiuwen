@@ -57,7 +57,7 @@ func _initialize() -> void:
 		"corners": Array(source.corners), "water_corners": Array(source.water_corners),
 		"water_depths": Array(source.water_depths), "minimum": source.minimum,
 		"maximum": source.maximum, "water_xy": [], "colors": [], "normals": [],
-		"land_vertices": [], "water_vertices": [],
+		"land_vertices": [], "water_vertices": [], "apron_vertices": [],
 	}
 	for value in source.water_xy:
 		result.water_xy.append([value.x, value.y])
@@ -71,6 +71,9 @@ func _initialize() -> void:
 	var river := source.build_water_mesh(0, 0, source.gw, source.gh)
 	for value in river.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
 		result.water_vertices.append([value.x, value.z, value.y])
+	var apron := source.build_apron_mesh()
+	for value in apron.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
+		result.apron_vertices.append([value.x, value.z, value.y])
 	var output := FileAccess.open("res://result.json", FileAccess.WRITE)
 	output.store_string(JSON.stringify(result))
 	output.close()
@@ -98,7 +101,11 @@ func _initialize() -> void:
         "minimum": reference.minimum, "maximum": reference.maximum,
         "land_vertices": reference.tile_arrays(0, 0, 19, 13, 4).vertices,
         "water_vertices": reference.water_arrays(0, 0, 19, 13).vertices,
+        "apron_vertices": reference.apron_arrays().vertices,
     }
     for name, values in expected.items():
         # Native packed vectors/colors are float32; the Python reference is float64.
-        np.testing.assert_allclose(actual[name], values, rtol=0, atol=3e-6, err_msg=name)
+        # The apron reaches +/-140 m, where float32 spacing is ~8e-6, so it needs a
+        # looser absolute tolerance than the map-sized lattices.
+        atol = 1e-4 if name == "apron_vertices" else 3e-6
+        np.testing.assert_allclose(actual[name], values, rtol=0, atol=atol, err_msg=name)
