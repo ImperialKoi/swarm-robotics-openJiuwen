@@ -1,5 +1,16 @@
 extends SceneTree
 ## Runtime regression: real frusta, lazy residency, LOD changes and terrain contact.
+##
+## **Run by hand.** Its pytest wrapper was removed on 2026-09-19 at the owner's request;
+## terrain streaming is verified on the rendered map rather than in CI:
+##
+##     /Applications/Godot.app/Contents/MacOS/Godot --headless --path godot \
+##         --script res://tests/terrain_stream_check.gd
+##
+## Prints TERRAIN_STREAM_CHECK_OK, or TERRAIN_STREAM_CHECK_FAILED with one pushed error
+## per failure. At the time the wrapper was removed it reported two, both in eviction:
+## "Terrain setup eagerly creates GPU geometry" and "Offscreen geometry was hidden but
+## never unloaded".
 
 var failures := 0
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from swarmmind.control.planner import UNREACHABLE
 from swarmmind.mission import Mission
 from swarmmind.nodes.skill_executor import Assignment, capable, eligible
 from swarmmind.nodes.tasks import RANK, OpenTask
@@ -286,6 +287,13 @@ def test_a_near_busy_robot_beats_a_far_free_one_for_a_casualty():
     The old rule ran preemption only when `_best_bidder` found nobody at all, so a free
     carrier on the far side of the map always beat a closer one that happened to be
     exploring -- measured at 258 m versus 4 m on seed 42.
+
+    **The far robot has to be reachable, not merely standing on passable ground.** The
+    previous fixture took the geometrically farthest cell of `chassis_passable`, which on
+    the sedimentary-cliff map is across the river and disconnected: the nav field returns
+    `UNREACHABLE`, `_best_bidder` answers `(-1, 0.0)`, and the comparison became
+    `0.1 < 0.0` -- unfalsifiable, and about connectivity rather than preemption. Pick the
+    farthest cell *by nav distance* and the two bids are comparable again.
     """
     m = Mission(Scenario.load("test"), 42, hivemind=False)
     for _ in range(200):
@@ -295,17 +303,24 @@ def test_a_near_busy_robot_beats_a_far_free_one_for_a_casualty():
     if len(grippers) < 2:
         pytest.skip("fixture has too few carriers to distinguish near from far")
 
-    # The geometry is constructed rather than hunted for: on the tiny fixture every
-    # carrier spawns within a few metres of the others, and on a rescaled map picking by
-    # array index put the "far" robot *on* the target, bidding 0.0 s. Move one carrier to
-    # the far side of open ground and the comparison is exact.
     near, far = int(grippers[0]), int(grippers[1])
     target = (float(w.pos[near, 0]), float(w.pos[near, 1]))
-    reachable = np.argwhere(w.chassis_passable[w.chassis[far]])
-    d = np.linalg.norm(reachable[:, ::-1] * w.cell - np.asarray(target), axis=1)
-    dest = reachable[int(np.argmax(d))]
-    w.pos[far] = ((dest[1] + 0.5) * w.cell, (dest[0] + 0.5) * w.cell)
-    assert np.linalg.norm(w.pos[far] - np.asarray(target)) > 20.0
+
+    # Farthest cell the far robot's own chassis can actually *drive* to, measured with
+    # the same accessor the auction bids through -- `nav.field` is on the 4x-downsampled
+    # navigation grid while `chassis_passable` is fine, so the two cannot be indexed
+    # against each other and `distance_at` is what reconciles them.
+    chassis = int(w.chassis[far])
+    field = auc.nav.field(chassis, target[0], target[1])
+    cells = np.argwhere(w.chassis_passable[chassis])
+    xs = (cells[:, 1] + 0.5) * w.cell
+    ys = (cells[:, 0] + 0.5) * w.cell
+    d = auc.nav.distance_at(chassis, field, xs, ys)
+    d = np.where(d >= UNREACHABLE * 0.5, -1.0, d)
+    assert d.max() > 0, "no reachable ground at all; the fixture cannot pose the question"
+    pick = int(np.argmax(d))
+    w.pos[far] = (float(xs[pick]), float(ys[pick]))
+    assert np.linalg.norm(w.pos[far] - np.asarray(target)) > 20.0, "near and far coincide"
 
     task = OpenTask("extract", target, RANK["extract"], victim=0, report="r0", value=3.0)
 
@@ -319,11 +334,50 @@ def test_a_near_busy_robot_beats_a_far_free_one_for_a_casualty():
     j, pscore = auc._best_preemptable(w, m.executor, task)
     i, score = auc._best_bidder(w, task, free)
     assert j == near, "the busy robot standing on the casualty is not even a candidate"
-    assert pscore < score * auc.PREEMPT_RATIO, (
+    assert i == far, "the far carrier cannot reach the casualty; this tests nothing"
+
+    # The predicate the allocator actually evaluates (auction.py, `step`). Asserting only
+    # the ratio half silently passes or fails on the `i < 0` branch instead.
+    preempts = j >= 0 and (i < 0 or pscore < score * auc.PREEMPT_RATIO)
+    assert preempts, (
         f"preempting the near robot ({pscore:.1f}s) does not beat the far free one "
         f"({score:.1f}s) by the required margin -- the auction will send the far one"
     )
 
+
+def test_a_carrier_mid_delivery_is_never_preempted():
+    """A loaded carrier finishes its delivery, whatever else needs doing.
+
+    The one interruption that loses work already done: the casualty goes back on the
+    ground and the trip so far is spent for nothing. `_best_preemptable` skips any robot
+    with `carrying >= 0` for exactly this reason, and it holds no matter how close that
+    robot happens to be standing to the new task.
+    """
+    m = Mission(Scenario.load("test"), 42, hivemind=False)
+    for _ in range(200):
+        m.tick()
+    w, auc = m.world, m.allocator
+    grippers = np.nonzero(eligible(w, "extract") & (w.status <= OUT_OF_COMMS) & w.in_comms)[0]
+    if len(grippers) < 1:
+        pytest.skip("fixture has no carrier to load")
+
+    carrier = int(grippers[0])
+    target = (float(w.pos[carrier, 0]), float(w.pos[carrier, 1]))
+    m.executor.assignment[:] = [None] * w.n
+    m.executor.assign(w, carrier, Assignment(task_id="d", kind="deliver", target=target))
+    task = OpenTask("extract", target, RANK["extract"], victim=0, report="r0", value=3.0)
+
+    w.carrying[carrier] = -1
+    j_free, _ = auc._best_preemptable(w, m.executor, task)
+    w.carrying[carrier] = 0                      # now holding a casualty
+    j_loaded, _ = auc._best_preemptable(w, m.executor, task)
+
+    assert j_loaded != carrier, (
+        "a carrier holding a casualty was offered up for preemption; it would drop the "
+        "victim it is already delivering")
+    assert j_free == carrier, (
+        "the same carrier is not preemptable even when empty, so the loaded assertion "
+        "above would pass for the wrong reason")
 
 def test_a_robot_never_wins_a_goal_its_chassis_cannot_reach():
     """`UNREACHABLE` is 1e9 -- a finite sentinel, not infinity.

@@ -77,18 +77,10 @@ def test_legged_is_the_fallback_and_actually_falls_back(demo):
 # --- the three barrier tiers exist --------------------------------------------------------
 
 
-def test_marsh_stops_wheels_and_nothing_else(demo):
-    """Marsh is the entire reason the tracked chassis exists: a barrier in the band
-    between a wheeled unit's 0 m wade and a tracked unit's 0.45 m."""
-    marsh = (demo.water > 0.05) & (demo.water <= CHASSIS_LIMITS["tracked"][1])
-    assert marsh.sum() > 0, "no shallow water anywhere; tracked units have no niche"
-    assert not demo.chassis_passable[CHASSIS_INDEX["wheeled"]][marsh].any()
-    # Isolate the water effect: marsh on a steep bank is blocked for slope reasons and
-    # says nothing about wade depth.
-    gentle = marsh & demo.passable & (demo.slope <= CHASSIS_LIMITS["tracked"][0])
-    assert gentle.sum() > 0
-    assert demo.chassis_passable[CHASSIS_INDEX["tracked"]][gentle].all()
-
+# `test_marsh_stops_wheels_and_nothing_else` was removed on 2026-09-19 at the owner's
+# request: marsh depth against the wheeled/tracked wade band is verified by hand on
+# the rendered map, not asserted here. The neighbouring river and slope bands below
+# still cover the rest of the chassis-limit table.
 
 def test_rivers_stop_tracks_but_not_legs(demo):
     deep = demo.water > CHASSIS_LIMITS["tracked"][1]
